@@ -44,7 +44,7 @@ int32_t main(int32_t argc, char **argv)
 
   while (1)
   {
-    std::unique_ptr<char[], decltype(&free)> raw_expression(readline("\x1B[92m(lexemn)\x1B[97m "), free);
+    std::unique_ptr<char[], decltype(&free)> raw_expression(readline("\x1B[92m(lexemn)\x1B[0m "), free);
     add_history(raw_expression.get());
   }
 

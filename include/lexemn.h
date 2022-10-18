@@ -41,7 +41,7 @@ namespace lexemn
   {
     std::stringstream ss;
 
-    ss << "\x1B[97mWelcome to" << std::endl;
+    ss << "Welcome to" << std::endl;
     ss << "\x1B[96m ___       _______      \x1B[91m___    ___\x1B[96m _______   _____ ______   ________" << std::endl;
     ss << "|\\  \\     |\\  ___ \\    \x1B[91m|\\  \\  /  /|\x1B[96m\\  ___ \\ |\\   _ \\  _   \\|\\   ___  \\" << std::endl;
     ss << "\\ \\  \\    \\ \\   __/|   \x1B[91m\\ \\  \\/  / |\x1B[96m \\   __/|\\ \\  \\\\\\__\\ \\  \\ \\  \\\\ \\  \\" << std::endl;
