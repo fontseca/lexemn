@@ -33,14 +33,30 @@
 #define LEXEMN_H
 
 #include <iostream>
+#include <sstream>
 
-const std::string LEXEMN_ASCII = R"( ___       _______      ___    ___ _______   _____ ______   ________
-|\  \     |\  ___ \    |\  \  /  /|\  ___ \ |\   _ \  _   \|\   ___  \
-\ \  \    \ \   __/|   \ \  \/  / | \   __/|\ \  \\\__\ \  \ \  \\ \  \
- \ \  \    \ \  \_|/__  \ \    / / \ \  \_|/_\ \  \\|__| \  \ \  \\ \  \
-  \ \  \____\ \  \_|\ \  /     \/   \ \  \_|\ \ \  \    \ \  \ \  \\ \  \
-   \ \_______\ \_______\/  /\   \    \ \_______\ \__\    \ \__\ \__\\ \__\
-    \|_______|\|_______/__/ /\ __\    \|_______|\|__|     \|__|\|__| \|__|
-                       |__|/ \|__|)";
+namespace lexemn
+{
+  void welcome()
+  {
+    std::stringstream ss;
 
+    ss << "\x1B[97mWelcome to" << std::endl;
+    ss << "\x1B[96m ___       _______      \x1B[91m___    ___\x1B[96m _______   _____ ______   ________" << std::endl;
+    ss << "|\\  \\     |\\  ___ \\    \x1B[91m|\\  \\  /  /|\x1B[96m\\  ___ \\ |\\   _ \\  _   \\|\\   ___  \\" << std::endl;
+    ss << "\\ \\  \\    \\ \\   __/|   \x1B[91m\\ \\  \\/  / |\x1B[96m \\   __/|\\ \\  \\\\\\__\\ \\  \\ \\  \\\\ \\  \\" << std::endl;
+    ss << " \\ \\  \\    \\ \\  \\_|/__  \x1B[91m\\ \\    / /\x1B[96m \\ \\  \\_|/_\\ \\  \\\\|__| \\  \\ \\  \\\\ \\  \\" << std::endl;
+    ss << "  \\ \\  \\____\\ \\  \\_|\\ \\  \x1B[91m/     \\/\x1B[96m   \\ \\  \\_|\\ \\ \\  \\    \\ \\  \\ \\  \\\\ \\  \\" << std::endl;
+    ss << "   \\ \\_______\\ \\_______\\\x1B[91m/  /\\   \\\x1B[96m    \\ \\_______\\ \\__\\    \\ \\__\\ \\__\\\\ \\__\\" << std::endl;
+    ss << "    \\|_______|\\|_______\x1B[91m/__/ /\\ __\\\x1B[96m    \\|_______|\\|__|     \\|__|\\|__| \\|__|" << std::endl;
+    ss << "                       \x1B[91m|__|/ \\|__|\x1B[97m." << std::endl;
+
+    printf("%s\n", ss.str().c_str());
+    printf("An open source mathematical tool and library for interpreting algebraic\n");
+    printf("expressions, plotting functions and solving equations.\033[0m\n\n");
+    printf("To contribute to the LEXEMN project go to https://github.com/fontseca/lexemn\n");
+    printf("Copyright (C) 2022 by Jeremy Fonseca <fonseca.dev@outlook.com>\n");
+    printf("Invoke `quit()' to exit or `help()' for more information.\n\n");
+  }
+}
 #endif

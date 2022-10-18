@@ -33,8 +33,10 @@
 
 #include "lexemn.h"
 
+using namespace lexemn;
+
 int32_t main(int32_t argc, char **argv)
 {
-  printf("%s\n", LEXEMN_ASCII.c_str());
+  welcome();
   return EXIT_SUCCESS;
 }
