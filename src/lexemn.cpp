@@ -30,6 +30,9 @@
  **/
 
 #include <iostream>
+#include <memory>
+#include <readline/readline.h>
+#include <readline/history.h>
 
 #include "lexemn.h"
 
@@ -38,5 +41,12 @@ using namespace lexemn;
 int32_t main(int32_t argc, char **argv)
 {
   welcome();
+
+  while (1)
+  {
+    std::unique_ptr<char[], decltype(&free)> raw_expression(readline("\x1B[92m(lexemn)\x1B[97m "), free);
+    add_history(raw_expression.get());
+  }
+
   return EXIT_SUCCESS;
 }
