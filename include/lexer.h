@@ -33,19 +33,33 @@
 #define LEXER_H
 
 /*
- * The lexical analyzer takes a raw string as its input and will convert it into a
- * sequence of lexical tokens. These tokes are strings with an assigned and and
- * identified value. The parser will use these tokens to later create the parse tree.
+ * The lexical analyzer takes a raw string as its input and will convert it
+ * into a sequence of lexical tokens. These tokes are strings with an assigned
+ * and identified value. The parser will use these tokens to later create the
+ * parse tree.
  *
  * For the lexemn string expression
  *  "x:=1*2;",
- * the lexer will have to generate a structure of tokens similar to the following:
+ * the lexer will have to generate a structure of tokens similar to the
+ * following:
  *   (lexeme,   token name)
  *   ("x",      <identifier>)
  *   ("1",      <literal>)
  *   ("*",      <operator>)
  *   ("2",      <literal>)
- *   (";",      <separator>)
+ *   (";",      <separator>).
+ *
+ * The lexer does not know where each token should be located, it can report
+ * about not valid tokens (e.g., an illegal or unrecognized symbol) and other
+ * malformed entities. It will not look for tokens out of space, mispelled
+ * keywords, mistmatched types, etc.
+ *
+ * For the sentence '6 := f(x)', the lexer will not generate any error becasue
+ * it has no concept of the appropiate arrangement of the tokens. It is the
+ * parser's job to catch this error.
+ *
+ * The lexer can be a convenient place to carry out some other stuff like
+ * stripping out comments and white spaces between tokens.
  */
 
 class lexer
