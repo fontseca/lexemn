@@ -35,17 +35,26 @@
 #include <readline/history.h>
 
 #include "lexemn.h"
+#include "types.h"
+#include "analyzers/lexical-analyzer.h"
 
 using namespace lexemn;
+using namespace lexemn::types;
 
 int32_t main(int32_t argc, char **argv)
 {
   welcome();
 
+  lexer_t lexer;
+
   while (1)
   {
     std::unique_ptr<char[], decltype(&free)> raw_expression(readline("\x1B[92m(lexemn)\x1B[0m "), free);
-    add_history(raw_expression.get());
+    if (raw_expression.get()[0] != '\0')
+    {
+      add_history(raw_expression.get());
+      lexer.tokenize(raw_expression.get());
+    }
   }
 
   return EXIT_SUCCESS;
