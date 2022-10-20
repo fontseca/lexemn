@@ -32,6 +32,11 @@
 #ifndef LEXER_H
 #define LEXER_H
 
+#include <string_view>
+#include <unordered_map>
+
+#include "types.h"
+
 /*
  * The lexical analyzer takes a raw string as its input and will convert it
  * into a sequence of lexical tokens. These tokes are strings with an assigned
@@ -62,8 +67,25 @@
  * stripping out comments and white spaces between tokens.
  */
 
-class lexer
+namespace lexemn
 {
-};
+
+  namespace details
+  {
+    struct lexical_analyzer
+    {
+      std::unordered_map<types::token_name_t, types::token_value_t> tokenize(const std::string_view expression);
+
+    private:
+      std::string m_raw_expression;
+    };
+  }
+
+  namespace types
+  {
+    typedef details::lexical_analyzer lexer_t;
+  }
+
+}
 
 #endif
