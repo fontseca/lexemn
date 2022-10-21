@@ -37,11 +37,22 @@
 #include "analyzers/lexical-analyzer.h"
 #include "types.h"
 
-namespace lexemn
+namespace lexemn::lexical_analyzer
 {
-  std::unordered_map<types::token_name_t, types::token_value_t> details::lexical_analyzer::tokenize(const std::string_view expression)
+  bool is_valid_expression(const std::string_view expression)
   {
-    printf("analyzing expression `%s'...\n", expression.data());
+    return true;
+  }
+
+  std::unordered_map<types::token_name_t, types::token_value_t>
+  tokenize(const std::string_view expression)
+  {
+    using namespace types;
+
+    if (!is_valid_expression(expression))
+      throw std::runtime_error("error: invalid token");
+
     return {};
   }
+
 }

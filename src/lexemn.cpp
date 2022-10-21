@@ -36,17 +36,14 @@
 #include <regex>
 
 #include "lexemn.h"
-#include "types.h"
 #include "analyzers/lexical-analyzer.h"
 
 using namespace lexemn;
-using namespace lexemn::types;
+using namespace lexemn::lexical_analyzer;
 
 int32_t main(int32_t argc, char **argv)
 {
   welcome();
-
-  lexer_t lexer;
 
   const std::regex blank_regex("^[[:space:]]*$", std::regex_constants::grep);
 
@@ -56,7 +53,14 @@ int32_t main(int32_t argc, char **argv)
     if (!std::regex_search(raw_expression.get(), blank_regex))
     {
       add_history(raw_expression.get());
-      lexer.tokenize(raw_expression.get());
+      try
+      {
+        tokenize(raw_expression.get());
+      }
+      catch (const std::exception &e)
+      {
+        std::cerr << e.what() << '\n';
+      }
     }
   }
 

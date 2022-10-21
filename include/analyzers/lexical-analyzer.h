@@ -67,25 +67,10 @@
  * stripping out comments and white spaces between tokens.
  */
 
-namespace lexemn
+namespace lexemn::lexical_analyzer
 {
-
-  namespace details
-  {
-    struct lexical_analyzer
-    {
-      std::unordered_map<types::token_name_t, types::token_value_t> tokenize(const std::string_view expression);
-
-    private:
-      std::string m_raw_expression;
-    };
-  }
-
-  namespace types
-  {
-    typedef details::lexical_analyzer lexer_t;
-  }
-
+  bool is_valid_expression(const std::string_view expression);
+  std::unordered_map<types::token_name_t, types::token_value_t> tokenize(const std::string_view expression);
 }
 
 #endif
