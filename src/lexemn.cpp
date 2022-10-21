@@ -34,8 +34,11 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 #include <regex>
+#include <getopt.h>
+#include <cstring>
 
 #include "lexemn.h"
+#include "types.h"
 #include "analyzers/lexical-analyzer.h"
 
 using namespace lexemn;
@@ -43,15 +46,56 @@ using namespace lexemn::lexical_analyzer;
 
 int32_t main(int32_t argc, char **argv)
 {
-  welcome();
+  int8_t c;
+  types::running_mode_t x;
+
+  while (c = getopt_long(argc, argv, "cqvd", long_options, NULL), c ^ -1)
+  {
+    if (c == '?')
+      exit(EXIT_FAILURE);
+
+    switch (c)
+    {
+    case 'c':
+      x.color = true;
+      break;
+    case 'd':
+      x.debug = true;
+      break;
+    case 'q':
+      x.quiet = true;
+      break;
+    case 'v':
+      printf("LEXEMN v%s -- Copyright (C) 2022 by Jeremy Fonseca <fonseca.dev@outlook.com>\n", LXMN_VERSION);
+      exit(EXIT_SUCCESS);
+      break;
+    }
+  }
+
+  if (!x.quiet)
+    welcome(x);
 
   const std::regex blank_regex("^[[:space:]]*$", std::regex_constants::grep);
 
+  const char *lexemn_prompt;
+
+  if (x.color)
+    lexemn_prompt = "\x1B[92m~>\x1B[0m ";
+  else
+    lexemn_prompt = "~> ";
+
   while (1)
   {
-    std::unique_ptr<char[], decltype(&free)> raw_expression(readline("\x1B[92m(lexemn)\x1B[0m "), free);
+    std::unique_ptr<char[], decltype(&free)> raw_expression(readline(lexemn_prompt), free);
     if (!std::regex_search(raw_expression.get(), blank_regex))
     {
+      /* FIXME: Consider using a procedure for correct quitting (also for ^D and ^C) */
+      if (!strcmp(raw_expression.get(), "quit()"))
+      {
+        raw_expression.~unique_ptr();
+        exit(EXIT_SUCCESS);
+      }
+
       add_history(raw_expression.get());
       try
       {
