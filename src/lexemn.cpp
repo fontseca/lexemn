@@ -33,6 +33,7 @@
 #include <memory>
 #include <readline/readline.h>
 #include <readline/history.h>
+#include <regex>
 
 #include "lexemn.h"
 #include "types.h"
@@ -47,10 +48,12 @@ int32_t main(int32_t argc, char **argv)
 
   lexer_t lexer;
 
+  const std::regex blank_regex("^[[:space:]]*$", std::regex_constants::grep);
+
   while (1)
   {
     std::unique_ptr<char[], decltype(&free)> raw_expression(readline("\x1B[92m(lexemn)\x1B[0m "), free);
-    if (raw_expression.get()[0] != '\0')
+    if (!std::regex_search(raw_expression.get(), blank_regex))
     {
       add_history(raw_expression.get());
       lexer.tokenize(raw_expression.get());
