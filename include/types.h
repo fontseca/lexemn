@@ -47,6 +47,13 @@ namespace lexemn::types
     lxmn_string,
   };
 
+  struct running_mode_t
+  {
+    bool quiet;
+    bool debug;
+    bool color;
+  };
+
   typedef std::string token_name_t;
 }
 
