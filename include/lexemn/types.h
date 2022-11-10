@@ -37,7 +37,7 @@
 namespace lexemn::types
 {
 
-  enum struct token_value_t
+  enum struct token_name_t
   {
     lxmn_identifier,
     lxmn_keywork,
@@ -45,6 +45,9 @@ namespace lexemn::types
     lxmn_operator,
     lxmn_number,
     lxmn_string,
+    lxmn_assignment,
+    lxmn_closing_parenthesis,
+    lxmn_opening_parenthesis,
   };
 
   struct running_mode_t
@@ -54,7 +57,9 @@ namespace lexemn::types
     bool color;
   };
 
-  typedef std::string token_name_t;
+  typedef std::string token_value_t;
+
+  typedef std::pair<lexemn::types::token_value_t, lexemn::types::token_name_t> token_t;
 }
 
 #endif
