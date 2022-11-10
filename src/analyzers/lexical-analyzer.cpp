@@ -68,25 +68,22 @@
  * stripping out comments and white spaces between tokens.
  */
 
-
-std::regex digit("[0-9]");
+std::regex digit("^(([0-9]*)|(([0-9]*)\\.([0-9]*)))$");
 
 namespace lexemn::lexical_analyzer
 {
-  bool is_valid_expression(const std::string_view expression)
-  {
-    return true;
-  }
-
   std::unordered_map<types::token_name_t, types::token_value_t>
   tokenize(const std::string_view expression)
   {
     std::vector<std::string> numbers { }; /* an array of all the numbers in the expression */
-    std::uint32_t number_count { 0 }; /* the count of the number of digits in the expression */
-    std::uint8_t flag { 0 }; /* is activated if the current value is not a digit */
+    std::int32_t number_count { -1 }; /* the count of the number of digits in the expression */
+    std::uint8_t flag { 1 }; /* is activated if the current value is not a digit */
+    std::size_t i { };
 
-    for (const char& c : expression)
+    for (i = 0; i < expression.length(); ++i)
     {
+      std::int8_t c = expression[i];
+
       /* The current character must be a null terminated
       string to seach against a valid regular expression. */
 
@@ -94,14 +91,6 @@ namespace lexemn::lexical_analyzer
 
       if (std::regex_search(currentch, digit))
       {
-        /* Avoid segfault when trying to access the first
-        element by the first time (array is empty!) */
-
-        if (numbers.empty())
-        {
-          numbers.push_back({ });
-        }
-
         /* If there is a separation, then we are talking
         about another number and we're done with the
         current one. */
@@ -139,9 +128,6 @@ namespace lexemn::lexical_analyzer
     {
       std::cout << "number: '" << str << "'" << '\n';
     }
-
-    if (!is_valid_expression(expression))
-      throw std::runtime_error("error: invalid token");
 
     return {};
   }
