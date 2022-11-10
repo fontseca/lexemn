@@ -69,8 +69,7 @@
 
 namespace lexemn::lexical_analyzer
 {
-  bool is_valid_expression(const std::string_view expression);
-  std::unordered_map<types::token_name_t, types::token_value_t> tokenize(const std::string_view expression);
+  std::vector<lexemn::types::token_t> generate_tokens(const std::string_view expression);
 }
 
 #endif
