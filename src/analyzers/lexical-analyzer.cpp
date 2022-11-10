@@ -37,6 +37,7 @@
 
 #include "lexemn/analyzers/lexical-analyzer.h"
 #include "lexemn/types.h"
+#include "lexemn/utilities.h"
 
 /*
  * The lexical analyzer takes a raw string as its input and will convert it
@@ -68,16 +69,14 @@
  * stripping out comments and white spaces between tokens.
  */
 
-std::regex digit("^(([0-9]*)|(([0-9]*)\\.([0-9]*)))$");
-
 namespace lexemn::lexical_analyzer
 {
-  std::unordered_map<types::token_name_t, types::token_value_t>
-  tokenize(const std::string_view expression)
+  std::vector<lexemn::types::token_t> generate_tokens(const std::string_view expression)
   {
-    std::vector<std::string> numbers { }; /* an array of all the numbers in the expression */
-    std::int32_t number_count { -1 }; /* the count of the number of digits in the expression */
-    std::uint8_t flag { 1 }; /* is activated if the current value is not a digit */
+    std::vector<lexemn::types::token_t> lexems { }; /* an array of all the lexems in the expression */
+    std::int32_t lexem_count { -1 }; /* the count of lexems */
+    std::uint8_t digit_flag { 1 }; /* is activated if the current value is not a digit */
+    std::uint8_t identifier_flag { 1 };
     std::size_t i { };
 
     for (i = 0; i < expression.length(); ++i)
@@ -89,23 +88,23 @@ namespace lexemn::lexical_analyzer
 
       char currentch[2] { c, '\0' };
 
-      if (std::regex_search(currentch, digit))
+      if (std::regex_search(currentch, lexemn::utilities::regex::digit))
       {
         /* If there is a separation, then we are talking
         about another number and we're done with the
         current one. */
 
-        if (flag)
+        if (digit_flag)
         {
-          numbers.push_back({ });
-          number_count++;
-          flag = 0;
+          lexems.push_back(std::make_pair("", lexemn::types::token_name_t::lxmn_number));
+          lexem_count++;
+          digit_flag = 0;
         }
 
         /* Create a string of contigous digits that form
         a single numeric value. */
 
-        numbers[number_count] += currentch;
+        std::get<0>(lexems[lexem_count]) += currentch;
       }
       else
       {
@@ -119,17 +118,61 @@ namespace lexemn::lexical_analyzer
         and "5", so there will be two elements for the
         array of numbers. */
 
-        flag = 1; /* you'll need a new entry. */
+        digit_flag = 1; /* you'll need a new entry. */
+      }
+
+      /* For identifiers. */
+
+      if (std::regex_search(currentch, lexemn::utilities::regex::identifier))
+      {
+        if (identifier_flag)
+        {
+          lexems.push_back(std::make_pair("", lexemn::types::token_name_t::lxmn_identifier));
+          lexem_count++;
+          identifier_flag = 0;
+        }
+        std::get<0>(lexems[lexem_count]) += currentch;
+      }
+      else
+      {
+        identifier_flag = 1;
+      }
+
+
+      /* When arithmetic operator. */
+
+      if (std::regex_search(currentch, lexemn::utilities::regex::arithmetic_operator))
+      {
+        lexems.push_back(std::make_pair(currentch, lexemn::types::token_name_t::lxmn_operator));
+        lexem_count++;
+      }
+
+      /* When assignmen operator. */
+
+      if (c == ':' && expression[i + 1] == '=')
+      {
+        lexems.push_back(std::make_pair(":=", lexemn::types::token_name_t::lxmn_assignment));
+        lexem_count++;
+      }
+
+      /* When other operators. */
+
+      switch (c)
+      {
+        case '(':
+          lexems.push_back(std::make_pair(currentch, lexemn::types::token_name_t::lxmn_opening_parenthesis));
+          lexem_count++;
+          break;
+        
+        case ')':
+          lexems.push_back(std::make_pair(currentch, lexemn::types::token_name_t::lxmn_closing_parenthesis));
+          lexem_count++;
+          break;
       }
 
     }
 
-    for (const std::string& str : numbers)
-    {
-      std::cout << "number: '" << str << "'" << '\n';
-    }
-
-    return {};
+    return lexems;
   }
 
 }
