@@ -35,7 +35,7 @@
 #include <string_view>
 #include <unordered_map>
 
-#include "types.h"
+#include "lexemn/types.h"
 
 /*
  * The lexical analyzer takes a raw string as its input and will convert it

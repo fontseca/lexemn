@@ -37,9 +37,9 @@
 #include <getopt.h>
 #include <cstring>
 
-#include "lexemn.h"
-#include "types.h"
-#include "analyzers/lexical-analyzer.h"
+#include "lexemn/lexemn.h"
+#include "lexemn/types.h"
+#include "lexemn/analyzers/lexical-analyzer.h"
 
 using namespace lexemn;
 using namespace lexemn::lexical_analyzer;

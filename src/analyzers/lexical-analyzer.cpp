@@ -34,8 +34,8 @@
 #include <regex>
 #include <unordered_map>
 
-#include "analyzers/lexical-analyzer.h"
-#include "types.h"
+#include "lexemn/analyzers/lexical-analyzer.h"
+#include "lexemn/types.h"
 
 namespace lexemn::lexical_analyzer
 {
