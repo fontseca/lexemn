@@ -104,7 +104,11 @@ int32_t main(int32_t argc, char **argv)
 
     try
     {
-      lexemn::lexical_analyzer::tokenize(line.get());
+      auto tokens = lexemn::lexical_analyzer::generate_tokens(line.get());
+      std::ostringstream os;
+      for (const auto& token : tokens)
+        os << token.first << '<' << (int) token.second << '>';
+      std::cout << os.str() << '\n';
     }
     catch (const std::exception& e)
     {
