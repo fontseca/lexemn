@@ -41,18 +41,18 @@
 #include "lexemn/types.h"
 #include "lexemn/analyzers/lexical-analyzer.h"
 
-using namespace lexemn;
-using namespace lexemn::lexical_analyzer;
-
 int32_t main(int32_t argc, char **argv)
 {
   int8_t c;
-  types::running_mode_t x;
+  lexemn::types::running_mode_t x { false, false, true };
 
-  while (c = getopt_long(argc, argv, "cqvd", long_options, NULL), c ^ -1)
+  while (c = getopt_long(argc, argv, "cqvd", lexemn::long_options, NULL), c ^ -1)
   {
+  
     if (c == '?')
-      exit(EXIT_FAILURE);
+    {
+      std::exit(EXIT_FAILURE);
+    }
 
     switch (c)
     {
@@ -66,45 +66,49 @@ int32_t main(int32_t argc, char **argv)
       x.quiet = true;
       break;
     case 'v':
-      printf("LEXEMN v%s -- Copyright (C) 2022 by Jeremy Fonseca <fonseca.dev@outlook.com>\n", LXMN_VERSION);
-      exit(EXIT_SUCCESS);
-      break;
+      std::printf("LEXEMN v%s -- Copyright (C) 2022 by Jeremy Fonseca <fonseca.dev@outlook.com>\n", LXMN_VERSION);
+      std::exit(EXIT_SUCCESS);
     }
   }
 
+  /* Run in quiet mode. */
+
   if (!x.quiet)
-    welcome(x);
+  {
+    lexemn::welcome(x);
+  }
 
   const std::regex blank_regex("^[[:space:]]*$", std::regex_constants::grep);
+  const char* const lexemn_prompt = x.color ? "\x1B[92m~>\x1B[0m " : "~> ";
 
-  const char *lexemn_prompt;
-
-  if (x.color)
-    lexemn_prompt = "\x1B[92m~>\x1B[0m ";
-  else
-    lexemn_prompt = "~> ";
+  /* Read expressions and tokenize repeatedly. */
 
   while (1)
   {
-    std::unique_ptr<char[], decltype(&free)> raw_expression(readline(lexemn_prompt), free);
-    if (!std::regex_search(raw_expression.get(), blank_regex))
-    {
-      /* FIXME: Consider using a procedure for correct quitting (also for ^D and ^C) */
-      if (!strcmp(raw_expression.get(), "quit()"))
-      {
-        raw_expression.~unique_ptr();
-        exit(EXIT_SUCCESS);
-      }
 
-      add_history(raw_expression.get());
-      try
-      {
-        tokenize(raw_expression.get());
-      }
-      catch (const std::exception &e)
-      {
-        std::cerr << e.what() << '\n';
-      }
+    std::unique_ptr<char[], decltype(&free)> line(readline(lexemn_prompt), free);
+
+    if (std::regex_search(line.get(), blank_regex))
+      continue;
+
+    /* FIXME: Consider using a procedure for correct
+    quitting (also for ^D and ^C.) */
+
+    if (!strcmp(line.get(), "quit()"))
+    {
+      line.reset(nullptr);
+      std::exit(EXIT_SUCCESS);
+    }
+
+    add_history(line.get());
+
+    try
+    {
+      lexemn::lexical_analyzer::tokenize(line.get());
+    }
+    catch (const std::exception& e)
+    {
+      std::cerr << e.what() << '\n';
     }
   }
 
