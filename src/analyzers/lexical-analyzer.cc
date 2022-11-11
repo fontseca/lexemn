@@ -74,8 +74,8 @@ namespace lexemn::lexical_analyzer
   lexemn::types::tokens_squence_t generate_tokens(const std::string_view expression)
   {
     using namespace lexemn::utilities;
-
-    lexemn::types::tokens_squence_t lexemes { }; /* an array of all the lexemes in the expression */
+    using namespace lexemn::types;
+    tokens_squence_t lexemes { }; /* an array of all the lexemes in the expression */
     std::int32_t nlexemes { -1 };
     std::uint8_t make_new_numeric_entry { true };
     std::uint8_t make_new_identifier_entry { true };
