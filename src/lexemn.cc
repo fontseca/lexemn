@@ -40,11 +40,13 @@
 #include "lexemn/lexemn.h"
 #include "lexemn/types.h"
 #include "lexemn/analyzers/lexical-analyzer.h"
+#include "lexemn/utilities.h"
 
 int32_t main(int32_t argc, char **argv)
 {
+  using namespace lexemn::utilities;
+
   int8_t c;
-  lexemn::types::running_mode_t x { false, false, false };
 
   while (c = getopt_long(argc, argv, "cqvd", lexemn::long_options, NULL), c ^ -1)
   {
