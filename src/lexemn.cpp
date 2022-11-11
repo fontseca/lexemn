@@ -44,7 +44,7 @@
 int32_t main(int32_t argc, char **argv)
 {
   int8_t c;
-  lexemn::types::running_mode_t x { false, false, true };
+  lexemn::types::running_mode_t x { false, false, false };
 
   while (c = getopt_long(argc, argv, "cqvd", lexemn::long_options, NULL), c ^ -1)
   {
@@ -94,7 +94,7 @@ int32_t main(int32_t argc, char **argv)
     /* FIXME: Consider using a procedure for correct
     quitting (also for ^D and ^C.) */
 
-    if (!strcmp(line.get(), "quit()"))
+    if (!strcmp(line.get(), "quit()") || !strcmp(line.get(), "q()"))
     {
       line.reset(nullptr);
       std::exit(EXIT_SUCCESS);
@@ -106,8 +106,50 @@ int32_t main(int32_t argc, char **argv)
     {
       auto tokens = lexemn::lexical_analyzer::generate_tokens(line.get());
       std::ostringstream os;
+      
+      os << "[" << '\n';
+
       for (const auto& token : tokens)
-        os << token.first << '<' << (int) token.second << '>';
+      {
+        using namespace lexemn::types;
+
+        if (token_name_t::lxmn_number == token.second)
+        {
+          os << "  ('" << token.first << "', numeric value)," << '\n';
+        }
+
+        if (token_name_t::lxmn_identifier == token.second)
+        {
+          os << "  ('" << token.first << "', identifier)," << '\n';
+        }
+
+        if (token_name_t::lxmn_operator == token.second)
+        {
+          os << "  ('" << token.first << "', arithmetic operator)," << '\n';
+        }
+
+        if (token_name_t::lxmn_assignment == token.second)
+        {
+          os << "  ('" << token.first << "', assignment operator)," << '\n';
+        }
+
+        if (token_name_t::lxmn_opening_parenthesis == token.second)
+        {
+          os << "  ('" << token.first << "', opening parenthesis)," << '\n';
+        }
+
+        if (token_name_t::lxmn_closing_parenthesis == token.second)
+        {
+          os << "  ('" << token.first << "', closing parenthesis)," << '\n';
+        }
+
+        if (token_name_t::lxmn_separator == token.second)
+        {
+          os << "  ('" << token.first << "', separator)," << '\n';
+        }
+      }
+
+      os << "]";
       std::cout << os.str() << '\n';
     }
     catch (const std::exception& e)
