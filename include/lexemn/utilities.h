@@ -1,5 +1,5 @@
 /*
- * lexemn.h --
+ * utilities.h -- utility objects for lexemn
  *  ___       _______      ___    ___ _______   _____ ______   ________
  * |\  \     |\  ___ \    |\  \  /  /|\  ___ \ |\   _ \  _   \|\   ___  \
  * \ \  \    \ \   __/|   \ \  \/  / | \   __/|\ \  \\\__\ \  \ \  \\ \  \
@@ -29,22 +29,54 @@
  * Lexemn. If not, see <https://www.gnu.org/licenses/>.
  **/
 
-#ifndef LEXEMN_H
-#define LEXEMN_H
+#ifndef UTILITIES_H
+#define UTILITIES_H
 
 #include <iostream>
 #include <sstream>
 #include <getopt.h>
 #include <regex>
 
-#include "types.h"
+#include "lexemn/types.h"
 
 /* Specify the current LEXEMN's version. */
 
 #define LXMN_VERSION "0.0.1"
 
-namespace lexemn
+namespace lexemn::utilities
 {
+
+  namespace regex
+  {
+    extern std::regex digit;
+    extern std::regex arithmetic_operator;
+    extern std::regex identifier;
+  }
+
+  struct running_mode
+  {
+    unsigned char quiet : 1;
+    unsigned char debug : 1;
+    unsigned char color : 1;
+  };
+
+  extern running_mode x;
+
+  namespace tokens
+  {
+    enum struct token_name
+    {
+      lxmn_identifier,
+      lxmn_keywork,
+      lxmn_separator,
+      lxmn_operator,
+      lxmn_number,
+      lxmn_string,
+      lxmn_assignment,
+      lxmn_closing_parenthesis,
+      lxmn_opening_parenthesis,
+    };
+  }
 
   static struct option const long_options[] = {
       {"quiet", no_argument, NULL, 'q'},
@@ -54,7 +86,7 @@ namespace lexemn
       {NULL, 0, NULL, 0},
   };
 
-  void welcome(utilities::running_mode x)
+  void welcome(running_mode x)
   {
     std::stringstream ss;
 
@@ -89,4 +121,4 @@ namespace lexemn
     printf("Invoke `quit()' to exit or `help()' for more information.\n\n");
   }
 }
-#endif
+#endif /* UTILITIES_H */
