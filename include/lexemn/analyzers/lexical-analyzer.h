@@ -79,9 +79,9 @@ namespace lexemn::lexical_analyzer
     };
   }
 
-  std::vector<lexemn::types::token_t> generate_tokens(const std::string_view expression);
+  lexemn::types::tokens_squence_t generate_tokens(const std::string_view expression);
   void stringify_tokens(
-    const std::vector<lexemn::types::token_t>& tokens,
+    const lexemn::types::tokens_squence_t& tokens,
     std::string& str,
     types::tokens_string_format strformat = types::tokens_string_format::k_multiline);
 }
