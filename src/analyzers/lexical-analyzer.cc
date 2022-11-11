@@ -228,7 +228,7 @@ namespace lexemn::lexical_analyzer
               << "\x1B[0m"
               << expression.substr(i + 1) /* right chunk of expression */
               << '\n'
-              << std::setw(2 + i + 1)     /* calculate with for `^' */
+              << std::setw(2 + i + 1)     /* calculate width for `^' */
               << "^"
               << '\n';
 
