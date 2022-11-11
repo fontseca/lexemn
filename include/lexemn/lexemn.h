@@ -38,8 +38,10 @@
 #include <regex>
 
 #include "types.h"
+#include "lexemn/utilities.h"
 
 /* Specify the current LEXEMN's version. */
+
 #define LXMN_VERSION "0.0.1"
 
 namespace lexemn
@@ -53,7 +55,7 @@ namespace lexemn
       {NULL, 0, NULL, 0},
   };
 
-  void welcome(types::running_mode_t x)
+  void welcome(utilities::running_mode x)
   {
     std::stringstream ss;
 
