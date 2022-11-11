@@ -43,7 +43,9 @@
 
 int32_t main(int32_t argc, char **argv)
 {
+  using namespace lexemn::types;
   using namespace lexemn::utilities;
+  using namespace lexemn::lexical_analyzer;
 
   int8_t c;
 
@@ -105,13 +107,10 @@ int32_t main(int32_t argc, char **argv)
 
     try
     {
-      using namespace lexemn::lexical_analyzer;
+      tokens_squence_t tokens;
       std::string tokensstr { };
-      auto tokens = generate_tokens(line.get());
-      stringify_tokens(
-        tokens,
-        tokensstr,
-        types::tokens_string_format::k_multiline);
+      generate_tokens(line.get(), tokens);
+      stringify_tokens(tokens, tokensstr, types::tokens_string_format::k_multiline);
       std::cout << tokensstr << '\n';
     }
     catch (const std::exception& e)

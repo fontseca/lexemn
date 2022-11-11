@@ -71,11 +71,11 @@
 
 namespace lexemn::lexical_analyzer
 {
-  lexemn::types::tokens_squence_t generate_tokens(const std::string_view expression)
+  void generate_tokens(const std::string_view expression,
+  lexemn::types::tokens_squence_t& lexemes)
   {
     using namespace lexemn::utilities;
     using namespace lexemn::types;
-    tokens_squence_t lexemes { }; /* an array of all the lexemes in the expression */
     error_stream_t lexical_errors { };
     std::int32_t nlexemes { -1 };
     std::uint8_t make_new_numeric_entry { true };
@@ -239,8 +239,6 @@ namespace lexemn::lexical_analyzer
 
     if (error_flag)
       throw std::runtime_error(lexical_errors.str());
-
-    return lexemes;
   }
 
   void stringify_tokens(
