@@ -38,14 +38,14 @@
 #include <cstring>
 
 #include "lexemn/types.h"
-#include "lexemn/analyzers/lexical-analyzer.h"
+#include "lexemn/analyzers/lexer.h"
 #include "lexemn/utilities.h"
 
 int32_t main(int32_t argc, char **argv)
 {
   using namespace lexemn::types;
   using namespace lexemn::utilities;
-  using namespace lexemn::lexical_analyzer;
+  using namespace lexemn::lexer;
 
   int8_t c;
 

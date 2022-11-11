@@ -1,8 +1,8 @@
-lexemn:  lexical-analyzer.o lexemn.o utilities.o
-	g++ -Wall -Werror -o bin/lexemn lexemn.o lexical-analyzer.o utilities.o -lreadline
+lexemn:  lexer.o lexemn.o utilities.o
+	g++ -Wall -Werror -o bin/lexemn lexemn.o lexer.o utilities.o -lreadline
 
-lexical-analyzer.o: src/analyzers/lexical-analyzer.cc
-	g++ -Wall -Werror -c src/analyzers/lexical-analyzer.cc -I ./include
+lexer.o: src/analyzers/lexer.cc
+	g++ -Wall -Werror -c src/analyzers/lexer.cc -I ./include
 
 lexemn.o: src/lexemn.cc
 	g++ -Wall -Werror -c -I ./include src/lexemn.cc

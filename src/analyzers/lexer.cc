@@ -1,5 +1,5 @@
 /*
- * lexical-analyzer.cpp --
+ * lexer.cc --
  *  ___       _______      ___    ___ _______   _____ ______   ________
  * |\  \     |\  ___ \    |\  \  /  /|\  ___ \ |\   _ \  _   \|\   ___  \
  * \ \  \    \ \   __/|   \ \  \/  / | \   __/|\ \  \\\__\ \  \ \  \\ \  \
@@ -35,7 +35,7 @@
 #include <iomanip>
 #include <list>
 
-#include "lexemn/analyzers/lexical-analyzer.h"
+#include "lexemn/analyzers/lexer.h"
 #include "lexemn/utilities.h"
 #include "lexemn/types.h"
 
@@ -69,7 +69,7 @@
  * stripping out comments and white spaces between tokens.
  */
 
-namespace lexemn::lexical_analyzer
+namespace lexemn::lexer
 {
   void generate_tokens(const std::string_view expression,
   lexemn::types::tokens_squence_t& lexemes)

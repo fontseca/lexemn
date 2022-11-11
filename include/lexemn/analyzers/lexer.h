@@ -1,5 +1,5 @@
 /*
- * lexical-analyzer.h -- the lexical analyzer
+ * lexer.h -- the lexical analyzer
  *  ___       _______      ___    ___ _______   _____ ______   ________
  * |\  \     |\  ___ \    |\  \  /  /|\  ___ \ |\   _ \  _   \|\   ___  \
  * \ \  \    \ \   __/|   \ \  \/  / | \   __/|\ \  \\\__\ \  \ \  \\ \  \
@@ -67,7 +67,7 @@
  * stripping out comments and white spaces between tokens.
  */
 
-namespace lexemn::lexical_analyzer
+namespace lexemn::lexer
 {
 
   namespace types
