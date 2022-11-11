@@ -33,33 +33,15 @@
 #define TYPES_H
 
 #include <string>
+#include <vector>
+
+#include "lexemn/utilities.h"
 
 namespace lexemn::types
 {
-
-  enum struct token_name_t
-  {
-    lxmn_identifier,
-    lxmn_keywork,
-    lxmn_separator,
-    lxmn_operator,
-    lxmn_number,
-    lxmn_string,
-    lxmn_assignment,
-    lxmn_closing_parenthesis,
-    lxmn_opening_parenthesis,
-  };
-
-  struct running_mode_t
-  {
-    bool quiet;
-    bool debug;
-    bool color;
-  };
-
   typedef std::string token_value_t;
-
-  typedef std::pair<lexemn::types::token_value_t, lexemn::types::token_name_t> token_t;
+  typedef std::pair<lexemn::types::token_value_t, lexemn::utilities::tokens::token_name> token_t;
+  typedef std::vector<token_t> tokens_squence_t;
 }
 
 #endif
