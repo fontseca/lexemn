@@ -32,8 +32,8 @@
 #include <iostream>
 #include <string_view>
 #include <regex>
-#include <unordered_map>
-#include <queue>
+#include <iomanip>
+#include <list>
 
 #include "lexemn/analyzers/lexical-analyzer.h"
 #include "lexemn/utilities.h"
@@ -76,14 +76,19 @@ namespace lexemn::lexical_analyzer
     using namespace lexemn::utilities;
     using namespace lexemn::types;
     tokens_squence_t lexemes { }; /* an array of all the lexemes in the expression */
+    error_stream_t lexical_errors { };
     std::int32_t nlexemes { -1 };
     std::uint8_t make_new_numeric_entry { true };
     std::uint8_t make_new_identifier_entry { true };
+    std::uint8_t error_flag { 0 }; /* no error by default */
     std::size_t i { };
 
     for (i = 0; i < expression.length(); ++i)
     {
       std::int8_t c = expression[i];
+
+      if (std::isblank(c))
+        continue;
 
       /* The current character must be a null terminated
       string to seach against a valid regular expression. */
@@ -107,6 +112,7 @@ namespace lexemn::lexical_analyzer
         a single numeric value. */
 
         std::get<0>(lexemes[nlexemes]) += currentch;
+        continue;
       }
       else
       {
@@ -134,10 +140,35 @@ namespace lexemn::lexical_analyzer
           make_new_identifier_entry = false;
         }
         std::get<0>(lexemes[nlexemes]) += currentch;
+        continue;
       }
       else
       {
         make_new_identifier_entry = true;
+      }
+
+      if (c == '+' && expression[i + 1] == '-')
+      {
+        lexemes.push_back(std::make_pair("+-", tokens::token_name::lxmn_operator));
+        
+        /* Scale i by the length of ':=' */
+        
+        i += 1;
+        ++nlexemes;
+
+        continue;
+      }
+
+      if (c == '-' && expression[i + 1] == '+')
+      {
+        lexemes.push_back(std::make_pair("-+", tokens::token_name::lxmn_operator));
+
+        /* Scale i by the length of ':=' */
+        
+        i += 1;
+        ++nlexemes;
+
+        continue;
       }
 
       if (std::regex_search(currentch, regex::arithmetic_operator))
@@ -150,21 +181,12 @@ namespace lexemn::lexical_analyzer
       if (c == ':' && expression[i + 1] == '=')
       {
         lexemes.push_back(std::make_pair(":=", tokens::token_name::lxmn_assignment));
+        
+        /* Scale i by the length of ':=' */
+        
+        i += 1;
         ++nlexemes;
-        continue;
-      }
-
-      if (c == '+' && expression[i + 1] == '-')
-      {
-        lexemes.push_back(std::make_pair("+-", tokens::token_name::lxmn_operator));
-        ++nlexemes;
-        continue;
-      }
-
-      if (c == '-' && expression[i + 1] == '+')
-      {
-        lexemes.push_back(std::make_pair("-+", tokens::token_name::lxmn_operator));
-        ++nlexemes;
+        
         continue;
       }
 
@@ -186,8 +208,37 @@ namespace lexemn::lexical_analyzer
           lexemes.push_back(std::make_pair(currentch, tokens::token_name::lxmn_separator));
           ++nlexemes;
           break;
+
+        /* Report unrecognized symbols. */
+
+        default:
+        {
+          /* Ther's an error. */
+          
+          error_flag = 1;
+          
+          std::ostringstream err { };
+
+          err << "lexemn: \x1B[1;31merror:\x1B[0m unknown symbol detected near `" << c << "'" << '\n';
+
+          err << "  "                    /* left padding */
+              << expression.substr(0, i) /* left chunk of expression */
+              << "\x1B[1;31m"
+              << c                        /* colored illegal symbol */
+              << "\x1B[0m"
+              << expression.substr(i + 1) /* right chunk of expression */
+              << '\n'
+              << std::setw(2 + i + 1)     /* calculate with for `^' */
+              << "^"
+              << '\n';
+
+          lexical_errors << err.str();
+        }
       }
     }
+
+    if (error_flag)
+      throw std::runtime_error(lexical_errors.str());
 
     return lexemes;
   }
