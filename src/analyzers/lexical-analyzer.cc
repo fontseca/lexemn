@@ -36,8 +36,8 @@
 #include <queue>
 
 #include "lexemn/analyzers/lexical-analyzer.h"
-#include "lexemn/types.h"
 #include "lexemn/utilities.h"
+#include "lexemn/types.h"
 
 /*
  * The lexical analyzer takes a raw string as its input and will convert it
@@ -71,9 +71,11 @@
 
 namespace lexemn::lexical_analyzer
 {
-  std::vector<lexemn::types::token_t> generate_tokens(const std::string_view expression)
+  lexemn::types::tokens_squence_t generate_tokens(const std::string_view expression)
   {
-    std::vector<lexemn::types::token_t> lexemes { }; /* an array of all the lexemes in the expression */
+    using namespace lexemn::utilities;
+
+    lexemn::types::tokens_squence_t lexemes { }; /* an array of all the lexemes in the expression */
     std::int32_t nlexemes { -1 };
     std::uint8_t make_new_numeric_entry { true };
     std::uint8_t make_new_identifier_entry { true };
@@ -88,7 +90,7 @@ namespace lexemn::lexical_analyzer
 
       char currentch[2] { c, '\0' };
 
-      if (std::regex_search(currentch, lexemn::utilities::regex::digit))
+      if (std::regex_search(currentch, regex::digit))
       {
         /* If there is a separation, then we are talking
         about another number and we're done with the
@@ -96,7 +98,7 @@ namespace lexemn::lexical_analyzer
 
         if (make_new_numeric_entry)
         {
-          lexemes.push_back(std::make_pair("", lexemn::types::token_name_t::lxmn_number));
+          lexemes.push_back(std::make_pair("", tokens::token_name::lxmn_number));
           nlexemes++;
           make_new_numeric_entry = false;
         }
@@ -123,11 +125,11 @@ namespace lexemn::lexical_analyzer
 
       /* For identifiers. */
 
-      if (std::regex_search(currentch, lexemn::utilities::regex::identifier))
+      if (std::regex_search(currentch, regex::identifier))
       {
         if (make_new_identifier_entry)
         {
-          lexemes.push_back(std::make_pair("", lexemn::types::token_name_t::lxmn_identifier));
+          lexemes.push_back(std::make_pair("", tokens::token_name::lxmn_identifier));
           nlexemes++;
           make_new_identifier_entry = false;
         }
@@ -138,30 +140,30 @@ namespace lexemn::lexical_analyzer
         make_new_identifier_entry = true;
       }
 
-      if (std::regex_search(currentch, lexemn::utilities::regex::arithmetic_operator))
+      if (std::regex_search(currentch, regex::arithmetic_operator))
       {
-        lexemes.push_back(std::make_pair(currentch, lexemn::types::token_name_t::lxmn_operator));
+        lexemes.push_back(std::make_pair(currentch, tokens::token_name::lxmn_operator));
         ++nlexemes;
         continue;
       }
 
       if (c == ':' && expression[i + 1] == '=')
       {
-        lexemes.push_back(std::make_pair(":=", lexemn::types::token_name_t::lxmn_assignment));
+        lexemes.push_back(std::make_pair(":=", tokens::token_name::lxmn_assignment));
         ++nlexemes;
         continue;
       }
 
       if (c == '+' && expression[i + 1] == '-')
       {
-        lexemes.push_back(std::make_pair("+-", lexemn::types::token_name_t::lxmn_operator));
+        lexemes.push_back(std::make_pair("+-", tokens::token_name::lxmn_operator));
         ++nlexemes;
         continue;
       }
 
       if (c == '-' && expression[i + 1] == '+')
       {
-        lexemes.push_back(std::make_pair("-+", lexemn::types::token_name_t::lxmn_operator));
+        lexemes.push_back(std::make_pair("-+", tokens::token_name::lxmn_operator));
         ++nlexemes;
         continue;
       }
@@ -171,17 +173,17 @@ namespace lexemn::lexical_analyzer
       switch (c)
       {
         case '(':
-          lexemes.push_back(std::make_pair(currentch, lexemn::types::token_name_t::lxmn_opening_parenthesis));
+          lexemes.push_back(std::make_pair(currentch, tokens::token_name::lxmn_opening_parenthesis));
           ++nlexemes;
           break;
         
         case ')':
-          lexemes.push_back(std::make_pair(currentch, lexemn::types::token_name_t::lxmn_closing_parenthesis));
+          lexemes.push_back(std::make_pair(currentch, tokens::token_name::lxmn_closing_parenthesis));
           ++nlexemes;
           break;
         
         case ';':
-          lexemes.push_back(std::make_pair(currentch, lexemn::types::token_name_t::lxmn_separator));
+          lexemes.push_back(std::make_pair(currentch, tokens::token_name::lxmn_separator));
           ++nlexemes;
           break;
       }
@@ -191,7 +193,7 @@ namespace lexemn::lexical_analyzer
   }
 
   void stringify_tokens(
-    const std::vector<lexemn::types::token_t>& tokens,
+    const lexemn::types::tokens_squence_t& tokens,
     std::string& str,
     const types::tokens_string_format strformat)
   {
@@ -206,45 +208,45 @@ namespace lexemn::lexical_analyzer
       
       for (const auto& token : tokens)
       {
-        using namespace lexemn::types;
+        using namespace lexemn::utilities::tokens;
         os << indent << "{ `" << token.first << "', ";
         std::string laststr { i == ntokens ? " }" : " }," };
 
         switch(token.second)
         {
-          case token_name_t::lxmn_number:
+          case token_name::lxmn_number:
             os << "numeric value" << laststr << end;
             break;
 
-          case token_name_t::lxmn_identifier:
+          case token_name::lxmn_identifier:
             os << "identifier" << laststr << end;
             break;
 
-          case token_name_t::lxmn_operator:
+          case token_name::lxmn_operator:
             os << "arithmetic operator" << laststr << end;
             break;
 
-          case token_name_t::lxmn_assignment:
+          case token_name::lxmn_assignment:
             os << "assignment operator" << laststr << end;
             break;
 
-          case token_name_t::lxmn_opening_parenthesis:
+          case token_name::lxmn_opening_parenthesis:
             os << "opening parenthesis" << laststr << end;
             break;
 
-          case token_name_t::lxmn_closing_parenthesis:
+          case token_name::lxmn_closing_parenthesis:
             os << "closing parenthesis" << laststr << end;
             break;
 
-          case token_name_t::lxmn_separator:
+          case token_name::lxmn_separator:
             os << "separator" << laststr << end;
             break;
 
-          case token_name_t::lxmn_keywork:
+          case token_name::lxmn_keywork:
             os << "keyword" << laststr << end;
             break;
 
-          case token_name_t::lxmn_string:
+          case token_name::lxmn_string:
             os << "string" << laststr << end;
             break;
         }
