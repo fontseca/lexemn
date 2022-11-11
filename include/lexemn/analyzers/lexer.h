@@ -93,8 +93,8 @@ namespace lexemn::lexer
    * a buffer of this and any other unknown symbols
    * as an error string.
    */
-   void generate_tokens(const std::string_view expression,
-                    lexemn::types::tokens_squence_t& lexemes);
+   void generate_tokens(lexemn::types::tokens_squence_t& lexemes,
+                  const std::string_view expression);
 
   /*
    * Generates a string based on the sequence of tokens
@@ -103,8 +103,9 @@ namespace lexemn::lexer
    * logging into a file; or it can be formatted in
    * multiple lines using the tokens_string_format enum.
    */
-  void stringify_tokens(const lexemn::types::tokens_squence_t& tokens, std::string& str,
-            const types::tokens_string_format strformat = types::tokens_string_format::k_multiline);
+  void stringify_tokens(std::string& str,
+                  const lexemn::types::tokens_squence_t& tokens,
+                  const types::tokens_string_format strformat = types::tokens_string_format::k_multiline);
 }
 
 #endif

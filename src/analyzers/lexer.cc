@@ -71,8 +71,9 @@
 
 namespace lexemn::lexer
 {
-  void generate_tokens(const std::string_view expression,
-  lexemn::types::tokens_squence_t& lexemes)
+
+   void generate_tokens(lexemn::types::tokens_squence_t& lexemes,
+                  const std::string_view expression)
   {
     using namespace lexemn::utilities;
     using namespace lexemn::types;
@@ -241,10 +242,9 @@ namespace lexemn::lexer
       throw std::runtime_error(lexical_errors.str());
   }
 
-  void stringify_tokens(
-    const lexemn::types::tokens_squence_t& tokens,
-    std::string& str,
-    const types::tokens_string_format strformat)
+  void stringify_tokens(std::string& str,
+                  const lexemn::types::tokens_squence_t& tokens,
+                  const types::tokens_string_format strformat)
   {
       std::ostringstream os { };
       bool multiline { strformat == types::tokens_string_format::k_multiline };
