@@ -34,6 +34,7 @@
 
 #include <string>
 #include <vector>
+#include <sstream>
 
 #include "lexemn/utilities.h"
 
@@ -42,6 +43,7 @@ namespace lexemn::types
   typedef std::string token_value_t;
   typedef std::pair<lexemn::types::token_value_t, lexemn::utilities::tokens::token_name> token_t;
   typedef std::vector<token_t> tokens_squence_t;
+  typedef std::ostringstream error_stream_t;
 }
 
 #endif
