@@ -104,53 +104,14 @@ int32_t main(int32_t argc, char **argv)
 
     try
     {
-      auto tokens = lexemn::lexical_analyzer::generate_tokens(line.get());
-      std::ostringstream os;
-      
-      os << "[" << '\n';
-
-      for (const auto& token : tokens)
-      {
-        using namespace lexemn::types;
-
-        if (token_name_t::lxmn_number == token.second)
-        {
-          os << "  ('" << token.first << "', numeric value)," << '\n';
-        }
-
-        if (token_name_t::lxmn_identifier == token.second)
-        {
-          os << "  ('" << token.first << "', identifier)," << '\n';
-        }
-
-        if (token_name_t::lxmn_operator == token.second)
-        {
-          os << "  ('" << token.first << "', arithmetic operator)," << '\n';
-        }
-
-        if (token_name_t::lxmn_assignment == token.second)
-        {
-          os << "  ('" << token.first << "', assignment operator)," << '\n';
-        }
-
-        if (token_name_t::lxmn_opening_parenthesis == token.second)
-        {
-          os << "  ('" << token.first << "', opening parenthesis)," << '\n';
-        }
-
-        if (token_name_t::lxmn_closing_parenthesis == token.second)
-        {
-          os << "  ('" << token.first << "', closing parenthesis)," << '\n';
-        }
-
-        if (token_name_t::lxmn_separator == token.second)
-        {
-          os << "  ('" << token.first << "', separator)," << '\n';
-        }
-      }
-
-      os << "]";
-      std::cout << os.str() << '\n';
+      using namespace lexemn::lexical_analyzer;
+      std::string tokensstr { };
+      auto tokens = generate_tokens(line.get());
+      stringify_tokens(
+        tokens,
+        tokensstr,
+        types::tokens_string_format::k_multiline);
+      std::cout << tokensstr << '\n';
     }
     catch (const std::exception& e)
     {

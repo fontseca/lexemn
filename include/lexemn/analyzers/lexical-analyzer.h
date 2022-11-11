@@ -69,7 +69,21 @@
 
 namespace lexemn::lexical_analyzer
 {
+
+  namespace types
+  {
+    enum struct tokens_string_format : unsigned char
+    {
+      k_oneline,
+      k_multiline
+    };
+  }
+
   std::vector<lexemn::types::token_t> generate_tokens(const std::string_view expression);
+  void stringify_tokens(
+    const std::vector<lexemn::types::token_t>& tokens,
+    std::string& str,
+    types::tokens_string_format strformat = types::tokens_string_format::k_multiline);
 }
 
 #endif

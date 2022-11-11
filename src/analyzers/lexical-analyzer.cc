@@ -190,4 +190,68 @@ namespace lexemn::lexical_analyzer
     return lexemes;
   }
 
+  void stringify_tokens(
+    const std::vector<lexemn::types::token_t>& tokens,
+    std::string& str,
+    const types::tokens_string_format strformat)
+  {
+      std::ostringstream os { };
+      bool multiline { strformat == types::tokens_string_format::k_multiline };
+      std::string end { multiline ? "\n" : " " };
+      std::string indent { multiline ? "  " : "" };
+      std::size_t ntokens { tokens.size() };
+      std::size_t i { 1 };
+
+      os << "[" << end;
+      
+      for (const auto& token : tokens)
+      {
+        using namespace lexemn::types;
+        os << indent << "{ `" << token.first << "', ";
+        std::string laststr { i == ntokens ? " }" : " }," };
+
+        switch(token.second)
+        {
+          case token_name_t::lxmn_number:
+            os << "numeric value" << laststr << end;
+            break;
+
+          case token_name_t::lxmn_identifier:
+            os << "identifier" << laststr << end;
+            break;
+
+          case token_name_t::lxmn_operator:
+            os << "arithmetic operator" << laststr << end;
+            break;
+
+          case token_name_t::lxmn_assignment:
+            os << "assignment operator" << laststr << end;
+            break;
+
+          case token_name_t::lxmn_opening_parenthesis:
+            os << "opening parenthesis" << laststr << end;
+            break;
+
+          case token_name_t::lxmn_closing_parenthesis:
+            os << "closing parenthesis" << laststr << end;
+            break;
+
+          case token_name_t::lxmn_separator:
+            os << "separator" << laststr << end;
+            break;
+
+          case token_name_t::lxmn_keywork:
+            os << "keyword" << laststr << end;
+            break;
+
+          case token_name_t::lxmn_string:
+            os << "string" << laststr << end;
+            break;
+        }
+        ++i;
+      }
+      os << "]";
+      str = std::move(os.str());
+  }
+
 }
