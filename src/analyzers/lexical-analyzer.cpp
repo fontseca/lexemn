@@ -73,10 +73,10 @@ namespace lexemn::lexical_analyzer
 {
   std::vector<lexemn::types::token_t> generate_tokens(const std::string_view expression)
   {
-    std::vector<lexemn::types::token_t> lexems { }; /* an array of all the lexems in the expression */
-    std::int32_t lexem_count { -1 }; /* the count of lexems */
-    std::uint8_t digit_flag { 1 }; /* is activated if the current value is not a digit */
-    std::uint8_t identifier_flag { 1 };
+    std::vector<lexemn::types::token_t> lexemes { }; /* an array of all the lexemes in the expression */
+    std::int32_t nlexemes { -1 };
+    std::uint8_t make_new_numeric_entry { true };
+    std::uint8_t make_new_identifier_entry { true };
     std::size_t i { };
 
     for (i = 0; i < expression.length(); ++i)
@@ -94,17 +94,17 @@ namespace lexemn::lexical_analyzer
         about another number and we're done with the
         current one. */
 
-        if (digit_flag)
+        if (make_new_numeric_entry)
         {
-          lexems.push_back(std::make_pair("", lexemn::types::token_name_t::lxmn_number));
-          lexem_count++;
-          digit_flag = 0;
+          lexemes.push_back(std::make_pair("", lexemn::types::token_name_t::lxmn_number));
+          nlexemes++;
+          make_new_numeric_entry = false;
         }
 
         /* Create a string of contigous digits that form
         a single numeric value. */
 
-        std::get<0>(lexems[lexem_count]) += currentch;
+        std::get<0>(lexemes[nlexemes]) += currentch;
       }
       else
       {
@@ -118,41 +118,52 @@ namespace lexemn::lexical_analyzer
         and "5", so there will be two elements for the
         array of numbers. */
 
-        digit_flag = 1; /* you'll need a new entry. */
+        make_new_numeric_entry = true; /* you'll need a new entry. */
       }
 
       /* For identifiers. */
 
       if (std::regex_search(currentch, lexemn::utilities::regex::identifier))
       {
-        if (identifier_flag)
+        if (make_new_identifier_entry)
         {
-          lexems.push_back(std::make_pair("", lexemn::types::token_name_t::lxmn_identifier));
-          lexem_count++;
-          identifier_flag = 0;
+          lexemes.push_back(std::make_pair("", lexemn::types::token_name_t::lxmn_identifier));
+          nlexemes++;
+          make_new_identifier_entry = false;
         }
-        std::get<0>(lexems[lexem_count]) += currentch;
+        std::get<0>(lexemes[nlexemes]) += currentch;
       }
       else
       {
-        identifier_flag = 1;
+        make_new_identifier_entry = true;
       }
-
-
-      /* When arithmetic operator. */
 
       if (std::regex_search(currentch, lexemn::utilities::regex::arithmetic_operator))
       {
-        lexems.push_back(std::make_pair(currentch, lexemn::types::token_name_t::lxmn_operator));
-        lexem_count++;
+        lexemes.push_back(std::make_pair(currentch, lexemn::types::token_name_t::lxmn_operator));
+        ++nlexemes;
+        continue;
       }
-
-      /* When assignmen operator. */
 
       if (c == ':' && expression[i + 1] == '=')
       {
-        lexems.push_back(std::make_pair(":=", lexemn::types::token_name_t::lxmn_assignment));
-        lexem_count++;
+        lexemes.push_back(std::make_pair(":=", lexemn::types::token_name_t::lxmn_assignment));
+        ++nlexemes;
+        continue;
+      }
+
+      if (c == '+' && expression[i + 1] == '-')
+      {
+        lexemes.push_back(std::make_pair("+-", lexemn::types::token_name_t::lxmn_operator));
+        ++nlexemes;
+        continue;
+      }
+
+      if (c == '-' && expression[i + 1] == '+')
+      {
+        lexemes.push_back(std::make_pair("-+", lexemn::types::token_name_t::lxmn_operator));
+        ++nlexemes;
+        continue;
       }
 
       /* When other operators. */
@@ -160,19 +171,23 @@ namespace lexemn::lexical_analyzer
       switch (c)
       {
         case '(':
-          lexems.push_back(std::make_pair(currentch, lexemn::types::token_name_t::lxmn_opening_parenthesis));
-          lexem_count++;
+          lexemes.push_back(std::make_pair(currentch, lexemn::types::token_name_t::lxmn_opening_parenthesis));
+          ++nlexemes;
           break;
         
         case ')':
-          lexems.push_back(std::make_pair(currentch, lexemn::types::token_name_t::lxmn_closing_parenthesis));
-          lexem_count++;
+          lexemes.push_back(std::make_pair(currentch, lexemn::types::token_name_t::lxmn_closing_parenthesis));
+          ++nlexemes;
+          break;
+        
+        case ';':
+          lexemes.push_back(std::make_pair(currentch, lexemn::types::token_name_t::lxmn_separator));
+          ++nlexemes;
           break;
       }
-
     }
 
-    return lexems;
+    return lexemes;
   }
 
 }
