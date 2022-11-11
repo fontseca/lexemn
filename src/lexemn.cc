@@ -37,7 +37,6 @@
 #include <getopt.h>
 #include <cstring>
 
-#include "lexemn/lexemn.h"
 #include "lexemn/types.h"
 #include "lexemn/analyzers/lexical-analyzer.h"
 #include "lexemn/utilities.h"
@@ -48,7 +47,7 @@ int32_t main(int32_t argc, char **argv)
 
   int8_t c;
 
-  while (c = getopt_long(argc, argv, "cqvd", lexemn::long_options, NULL), c ^ -1)
+  while (c = getopt_long(argc, argv, "cqvd", long_options, NULL), c ^ -1)
   {
   
     if (c == '?')
@@ -73,11 +72,11 @@ int32_t main(int32_t argc, char **argv)
     }
   }
 
-  /* Run in quiet mode. */
+  /* Run in verbose mode. */
 
   if (!x.quiet)
   {
-    lexemn::welcome(x);
+    lexemn_welcome_message(x);
   }
 
   const std::regex blank_regex("^[[:space:]]*$", std::regex_constants::grep);
