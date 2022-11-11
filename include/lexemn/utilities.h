@@ -37,8 +37,6 @@
 #include <getopt.h>
 #include <regex>
 
-#include "lexemn/types.h"
-
 /* Specify the current LEXEMN's version. */
 
 #define LXMN_VERSION "0.0.1"
