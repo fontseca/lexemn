@@ -70,20 +70,6 @@
 namespace lexemn::lexer
 {
 
-  namespace types
-  {
-
-    /*
-     * Enum that determines the way that the stringified
-     * tokens are generated.
-     */
-    enum struct tokens_string_format : unsigned char
-    {
-      k_oneline,
-      k_multiline
-    };
-  }
-
   /*
    * Converts a raw string expression with the Lexemn
    * grammar into a sequence of recognized tokens that
@@ -105,7 +91,8 @@ namespace lexemn::lexer
    */
   void stringify_tokens(std::string& str,
                   const lexemn::types::tokens_squence_t& tokens,
-                  const types::tokens_string_format strformat = types::tokens_string_format::k_multiline);
+                  const utilities::tokens_string_format strformat = utilities::tokens_string_format::k_multiline);
+
 }
 
 #endif

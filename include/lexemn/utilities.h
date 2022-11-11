@@ -44,6 +44,16 @@
 namespace lexemn::utilities
 {
 
+  /*
+    * Enum that determines the way that the stringified
+    * tokens are generated.
+    */
+  enum struct tokens_string_format : unsigned char
+  {
+    k_oneline,
+    k_multiline
+  };
+
   namespace regex
   {
     extern std::regex digit;

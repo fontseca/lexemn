@@ -110,7 +110,7 @@ int32_t main(int32_t argc, char **argv)
       tokens_squence_t tokens;
       std::string tokensstr { };
       generate_tokens(tokens, line.get());
-      stringify_tokens(tokensstr, tokens, types::tokens_string_format::k_multiline);
+      stringify_tokens(tokensstr, tokens, tokens_string_format::k_multiline);
       std::cout << tokensstr << '\n';
     }
     catch (const std::exception& e)

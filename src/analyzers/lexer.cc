@@ -244,10 +244,10 @@ namespace lexemn::lexer
 
   void stringify_tokens(std::string& str,
                   const lexemn::types::tokens_squence_t& tokens,
-                  const types::tokens_string_format strformat)
+                  const utilities::tokens_string_format strformat)
   {
       std::ostringstream os { };
-      bool multiline { strformat == types::tokens_string_format::k_multiline };
+      bool multiline { strformat == utilities::tokens_string_format::k_multiline };
       std::string end { multiline ? "\n" : " " };
       std::string indent { multiline ? "  " : "" };
       std::size_t ntokens { tokens.size() };
