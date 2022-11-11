@@ -38,7 +38,6 @@
 #include <regex>
 
 #include "types.h"
-#include "lexemn/utilities.h"
 
 /* Specify the current LEXEMN's version. */
 
