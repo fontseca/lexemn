@@ -42,9 +42,47 @@ namespace lexemn::utilities
 
   /* Represents the way that Lexem will be running. */
 
-  running_mode x {
+  running_mode x
+  {
     .quiet { 0 },
     .debug { 0 },
     .color { 0 },
   };
+
+  /* Verbose welcoming message. */
+
+  void lexemn_welcome_message(const running_mode& x)
+  {
+    std::ostringstream os;
+
+    if (x.color)
+    {
+      os << "\x1B[96m ___       _______      \x1B[91m___    ___\x1B[96m _______   _____ ______   ________" << std::endl;
+      os << "|\\  \\     |\\  ___ \\    \x1B[91m|\\  \\  /  /|\x1B[96m\\  ___ \\ |\\   _ \\  _   \\|\\   ___  \\" << std::endl;
+      os << "\\ \\  \\    \\ \\   __/|   \x1B[91m\\ \\  \\/  / |\x1B[96m \\   __/|\\ \\  \\\\\\__\\ \\  \\ \\  \\\\ \\  \\" << std::endl;
+      os << " \\ \\  \\    \\ \\  \\_|/__  \x1B[91m\\ \\    / /\x1B[96m \\ \\  \\_|/_\\ \\  \\\\|__| \\  \\ \\  \\\\ \\  \\" << std::endl;
+      os << "  \\ \\  \\____\\ \\  \\_|\\ \\  \x1B[91m/     \\/\x1B[96m   \\ \\  \\_|\\ \\ \\  \\    \\ \\  \\ \\  \\\\ \\  \\" << std::endl;
+      os << "   \\ \\_______\\ \\_______\\\x1B[91m/  /\\   \\\x1B[96m    \\ \\_______\\ \\__\\    \\ \\__\\ \\__\\\\ \\__\\" << std::endl;
+      os << "    \\|_______|\\|_______\x1B[91m/__/ /\\ __\\\x1B[96m    \\|_______|\\|__|     \\|__|\\|__| \\|__|" << std::endl;
+      os << "                       \x1B[91m|__|/ \\|__|\x1B[97m" << std::endl;
+    }
+    else
+    {
+      os << " ___       _______      ___    ___ _______   _____ ______   ________" << std::endl;
+      os << "|\\  \\     |\\  ___ \\    |\\  \\  /  /|\\  ___ \\ |\\   _ \\  _   \\|\\   ___  \\" << std::endl;
+      os << "\\ \\  \\    \\ \\   __/|   \\ \\  \\/  / | \\   __/|\\ \\  \\\\\\__\\ \\  \\ \\  \\\\ \\  \\" << std::endl;
+      os << " \\ \\  \\    \\ \\  \\_|/__  \\ \\    / / \\ \\  \\_|/_\\ \\  \\\\|__| \\  \\ \\  \\\\ \\  \\" << std::endl;
+      os << "  \\ \\  \\____\\ \\  \\_|\\ \\  /     \\/   \\ \\  \\_|\\ \\ \\  \\    \\ \\  \\ \\  \\\\ \\  \\" << std::endl;
+      os << "   \\ \\_______\\ \\_______\\/  /\\   \\    \\ \\_______\\ \\__\\    \\ \\__\\ \\__\\\\ \\__\\" << std::endl;
+      os << "    \\|_______|\\|_______/__/ /\\ __\\    \\|_______|\\|__|     \\|__|\\|__| \\|__|" << std::endl;
+      os << "                       |__|/ \\|__|" << std::endl;
+    }
+
+    printf("%s\n", os.str().c_str());
+    printf("An open source mathematical tool and library for interpreting algebraic\n");
+    printf("expressions, plotting functions and solving equations.\033[0m\n\n");
+    printf("To contribute to the LEXEMN project go to https://github.com/fontseca/lexemn\n");
+    printf("Copyright (C) 2022 by Jeremy Fonseca <fonseca.dev@outlook.com>\n");
+    printf("Invoke `quit()' to exit or `help()' for more information.\n\n");
+  }
 }
