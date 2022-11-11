@@ -9,7 +9,7 @@ namespace lexemn::utilities
   namespace regex
   {
     std::regex digit("^(([0-9]*)|(([0-9]*)\\.([0-9]*)))$");
-    std::regex arithmetic_operator("[+\\-*\\/]");
+    std::regex arithmetic_operator("[\\^+\\-*\\/]");
     std::regex identifier("[a-zA-Z]");
   }
 
