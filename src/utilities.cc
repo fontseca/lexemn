@@ -78,11 +78,12 @@ namespace lexemn::utilities
       os << "                       |__|/ \\|__|" << std::endl;
     }
 
-    printf("%s\n", os.str().c_str());
-    printf("An open source mathematical tool and library for interpreting algebraic\n");
-    printf("expressions, plotting functions and solving equations.\033[0m\n\n");
-    printf("To contribute to the LEXEMN project go to https://github.com/fontseca/lexemn\n");
-    printf("Copyright (C) 2022 by Jeremy Fonseca <fonseca.dev@outlook.com>\n");
-    printf("Invoke `quit()' to exit or `help()' for more information.\n\n");
+    std::printf("%s\n"
+      "An open source mathematical tool and library for interpreting algebraic\n"
+      "expressions, plotting functions and solving equations.\033[0m\n\n"
+      "To contribute to the Lexemn project go to https://github.com/fontseca/lexemn\n"
+      "Copyright (C) 2022 by Jeremy Fonseca <fonseca.dev@outlook.com>\n\n"
+      "Invoke `help()' for further information; and `quit()' or `q()' to exit.\n\n",
+      os.str().c_str());
   }
 }
