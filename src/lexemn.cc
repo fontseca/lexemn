@@ -38,7 +38,7 @@
 #include <cstring>
 
 #include "lexemn/types.h"
-#include "lexemn/analyzers/lexer.h"
+#include "lexemn/lexer.h"
 #include "lexemn/utilities.h"
 
 int32_t main(int32_t argc, char **argv)

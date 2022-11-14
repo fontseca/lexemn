@@ -35,7 +35,7 @@
 #include <iomanip>
 #include <list>
 
-#include "lexemn/analyzers/lexer.h"
+#include "lexemn/lexer.h"
 #include "lexemn/utilities.h"
 #include "lexemn/types.h"
 
