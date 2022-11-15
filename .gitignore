@@ -47,3 +47,9 @@ bin/
 tmp/
 .vscode/
 .idea
+
+# Next commit's content.
+commit.txt
+
+# Personal development notes.
+notes.txt
