@@ -171,6 +171,16 @@ namespace lexemn::internal
     LEXEMN_NUMBER,
   };
 
+#undef CONSTANT
+#undef ARITH_OP
+#undef ALG_OP
+#undef LIN_ALG_OP
+#undef SET_OP
+#undef BITW_OP
+#undef LOGIC_OP
+#undef REL_OP
+#undef MISC_OP
+
 }
 
 
