@@ -58,8 +58,8 @@
  *
  * The lexer does not know where each token should be located, it can report
  * about not valid tokens (e.g., an illegal or unrecognized symbol) and other
- * malformed entities. It will not look for tokens out of space, mispelled
- * keywords, mistmatched types, etc.
+ * malformed entities. It will not look for tokens out of space, misspelled
+ * keywords, mismatched types, etc.
  *
  * For the sentence '6 := f(x)', the lexer will not generate any error becasue
  * it has no concept of the appropiate arrangement of the tokens. It is the

@@ -35,7 +35,7 @@
 
 #include "utilities.h"
 
-/* For abigous symbols like "|" that can mean "the cardinality of..." (if has
+/* For ambiguous symbols like "|" that can mean "the cardinality of..." (if has
    an ending) or "such that", the lexer must provide enough information of the
    current context so that the parser and interpreter will be able to perform
    the expression that was meant. One way to give context to each expression
@@ -75,7 +75,7 @@
   ARITH_OP(PERIOD,            ".")   \
   ARITH_OP(FACTORIAL,         "!")   \
                                      \
-  /* Algebra operators. */           \
+  /* Algebraic operators. */         \
                                      \
   ALG_OP(DEFINITION,         ":=")   \
   ALG_OP(OPEN_PAREN,          "(")   \
