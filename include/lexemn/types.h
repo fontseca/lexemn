@@ -36,7 +36,7 @@
 #include <vector>
 #include <sstream>
 
-#include "lexemn/utilities.h"
+#include "utilities.h"
 
 namespace lexemn::types
 {
