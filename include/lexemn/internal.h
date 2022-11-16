@@ -168,7 +168,8 @@ namespace lexemn::internal
     TOKEN_TYPES_TABLE
     LEXEMN_KEYWORD,
     LEXEMN_IDENTIFIER,
-    LEXEMN_NUMBER,
+    LEXEMN_INTEGER,
+    LEXEMN_DOUBLE,
   };
 
 #undef CONSTANT
