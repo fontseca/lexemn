@@ -29,94 +29,217 @@
  * Lexemn. If not, see <https://www.gnu.org/licenses/>.
  **/
 
-#include <iostream>
-#include <memory>
 #include <readline/readline.h>
 #include <readline/history.h>
-#include <regex>
 #include <getopt.h>
-#include <cstring>
+#include <regex>
 
-#include "lexemn/types.h"
-#include "lexemn/lexer.h"
-#include "lexemn/utilities.h"
+#include "lexemn/internal.h"
 
-int32_t main(int32_t argc, char **argv)
+#define VERSION  "v0.1"               /* Latest Lexemn version.  */
+#define PROGNAME "lexemn"
+
+#define C_BEGIN "\x1B[92m"            /* Green color.  */
+#define C_END   "\x1B[0m "            /* Default color.  */
+
+#define C_PROMPT(P) C_BEGIN P C_END   /* Colored prompt.  */
+#define UNC_PROMPT(P) P " "           /* Uncolored prompt.  */
+
+/* Abstracts the way Lexemn runs.  */
+struct running_mode
 {
-  using namespace lexemn::types;
-  using namespace lexemn::utilities;
-  using namespace lexemn::lexer;
+  unsigned char quiet : 1;
+  unsigned char debug : 1;
+  unsigned char color : 1;
+} x { .quiet { false }, .debug { false }, .color { false } };
 
-  int8_t c;
+#define PROMPT(P) x.color  \
+  ? C_PROMPT(#P)     \
+  : UNC_PROMPT(#P)
 
-  while (c = getopt_long(argc, argv, "cqvd", long_options, NULL), c ^ -1)
+static struct option const long_options[] =
+{
+    {"quiet", no_argument, NULL, 'q'},
+    {"color", no_argument, NULL, 'c'},
+    {"debug", no_argument, NULL, 'd'},
+    {"version", no_argument, NULL, 'v'},
+    {"help", no_argument, NULL, 'h'},
+    {"verbose", no_argument, NULL, 0},
+    {NULL, 0, NULL, 0},
+};
+
+/* Displays verbose welcoming.  */
+void emit_welcome()
+{
+  if (x.color)
   {
-  
+    std::fputs("\
+\x1B[96m ___       _______      \x1B[91m___    ___\x1B[96m _______   _____ ______   ________\n\
+|\\  \\     |\\  ___ \\    \x1B[91m|\\  \\  /  /|\x1B[96m\\  ___ \\ |\\   _ \\  _   \\|\\   ___  \\\n\
+\\ \\  \\    \\ \\   __/|   \x1B[91m\\ \\  \\/  / |\x1B[96m \\   __/|\\ \\  \\\\\\__\\ \\  \\ \\  \\\\ \\  \\\n\
+ \\ \\  \\    \\ \\  \\_|/__  \x1B[91m\\ \\    / /\x1B[96m \\ \\  \\_|/_\\ \\  \\\\|__| \\  \\ \\  \\\\ \\  \\\n\
+  \\ \\  \\____\\ \\  \\_|\\ \\  \x1B[91m/     \\/\x1B[96m   \\ \\  \\_|\\ \\ \\  \\    \\ \\  \\ \\  \\\\ \\  \\\n\
+   \\ \\_______\\ \\_______\\\x1B[91m/  /\\   \\\x1B[96m    \\ \\_______\\ \\__\\    \\ \\__\\ \\__\\\\ \\__\\\n\
+    \\|_______|\\|_______\x1B[91m/__/ /\\ __\\\x1B[96m    \\|_______|\\|__|     \\|__|\\|__| \\|__|\n\
+                       \x1B[91m|__|/ \\|__|\x1B[97m\n\
+\n", stdout);
+  }
+  else
+  {
+    std::fputs("\
+ ___       _______      ___    ___ _______   _____ ______   ________\n\
+|\\  \\     |\\  ___ \\    |\\  \\  /  /|\\  ___ \\ |\\   _ \\  _   \\|\\   ___  \\\n\
+\\ \\  \\    \\ \\   __/|   \\ \\  \\/  / | \\   __/|\\ \\  \\\\\\__\\ \\  \\ \\  \\\\ \\  \\\n\
+ \\ \\  \\    \\ \\  \\_|/__  \\ \\    / / \\ \\  \\_|/_\\ \\  \\\\|__| \\  \\ \\  \\\\ \\  \\\n\
+  \\ \\  \\____\\ \\  \\_|\\ \\  /     \\/   \\ \\  \\_|\\ \\ \\  \\    \\ \\  \\ \\  \\\\ \\  \\\n\
+   \\ \\_______\\ \\_______\\/  /\\   \\    \\ \\_______\\ \\__\\    \\ \\__\\ \\__\\\\ \\__\\\n\
+    \\|_______|\\|_______/__/ /\\ __\\    \\|_______|\\|__|     \\|__|\\|__| \\|__|\n\
+                       |__|/ \\|__|\n\
+\n", stdout);
+  }
+
+  std::fputs("\
+An open source mathematical tool and library for interpreting algebraic\n\
+expressions, plotting functions and solving equations.\033[0m\n\n\
+To contribute to the Lexemn project go to https://github.com/fontseca/lexemn\n\
+Copyright (C) 2022 by Jeremy Fonseca <fonseca.dev@outlook.com>\n\n\
+Invoke `help()' for further information; and `quit()' or `q()' to exit.\n\
+\n", stdout);
+}
+
+/* Displays usage guide.  */
+void usage(std::int32_t status)
+{
+  if (EXIT_SUCCESS ^ status)
+  {
+    std::fprintf(stderr, "Try '%s --help' for more information.\n", PROGNAME);
+  }
+  else
+  {
+    std::printf("\
+Usage: %s [OPTION]... [FILE]...\n\
+\n", PROGNAME);
+
+    std::fputs("\
+An open source mathematical tool and library for interpreting algebraic\n\
+expressions, plotting functions and solving equations.\n\
+\n", stdout);
+
+    std::fputs("\
+  -q, --quiet                  do not display welcome message\n\
+  -c, --color                  be colourful\n\
+  -d, --debug                  display debugging messages\n\
+  -h, --help                   display this information\n\
+  -v, --version                display current version\n\
+      --verbose                explain what is being done\n\
+\n", stdout);
+
+    std::fprintf(stdout, "\
+%s %s Copyright (C) 2022 by Jeremy Fonseca <fonseca.dev@outlook.com>\n",
+        PROGNAME, VERSION);
+  }
+ 
+  std::exit(status);
+}
+
+/* Displays current version.  */
+void emit_version()
+{
+  std::fprintf(stdout, "\
+%s %s Copyright (C) 2022 by Jeremy Fonseca <fonseca.dev@outlook.com>\n",
+    PROGNAME, VERSION);
+  std::exit(EXIT_SUCCESS);
+}
+
+std::int32_t main(std::int32_t argc, char **argv)
+{
+  char c;
+
+  while (c = getopt_long(
+        argc, argv, "cqvdh", long_options, NULL), c ^ -1)
+  {
     if (c == '?')
     {
-      std::exit(EXIT_FAILURE);
+      ::usage(EXIT_FAILURE);
     }
 
     switch (c)
     {
     case 'c':
+    {
       x.color = true;
       break;
+    }
     case 'd':
+    {
       x.debug = true;
       break;
+    }
     case 'q':
+    {
       x.quiet = true;
       break;
+    }
+    case 'h':
+    {
+      ::usage(EXIT_SUCCESS);
+      break;
+    }
     case 'v':
-      std::printf("LEXEMN v%s -- Copyright (C) 2022 by Jeremy Fonseca <fonseca.dev@outlook.com>\n", LXMN_VERSION);
-      std::exit(EXIT_SUCCESS);
+    {
+      ::emit_version();
+      break;
+    }
+    default:
+      ::usage(EXIT_FAILURE);
     }
   }
 
-  /* Run in verbose mode. */
+  /* Run in verbose mode.  */
 
   if (!x.quiet)
   {
-    lexemn_welcome_message(x);
+    emit_welcome();
   }
 
-  const std::regex blank_regex("^[[:space:]]*$", std::regex_constants::grep);
-  const char* const lexemn_prompt = x.color ? "\x1B[92m~>\x1B[0m " : "~> ";
+  /* Initialize lexer with a book by default.  */
 
-  /* Read expressions and tokenize repeatedly. */
+  lexemn::internal::lexer lexer(
+        std::make_unique<lexemn::internal::book>());
 
-  while (1)
+  for (;;)
   {
+    std::unique_ptr<char[], decltype(&std::free)> line(
+          readline(PROMPT(::/)), std::free);
 
-    std::unique_ptr<char[], decltype(&free)> line(readline(lexemn_prompt), free);
+#undef PROMPT
+#undef C_PROMPT
+#undef UNC_PROMPT
 
-    if (std::regex_search(line.get(), blank_regex))
+    if (std::regex_search(line.get(),
+        std::regex("^[[:space:]]*$",
+            std::regex_constants::grep)))
+    {
       continue;
+    }
 
-    /* FIXME: Consider using a procedure for correct
-    quitting (also for ^D and ^C.) */
+    /* FIXME: Consider using a procedure for correct quitting when recieving a
+       signal.  */
 
-    if (!strcmp(line.get(), "quit()") || !strcmp(line.get(), "q()"))
+    if (!strcmp(line.get(), "quit()")
+          || !strcmp(line.get(), "q()"))
     {
       line.reset(nullptr);
+      lexer.~lexer();
       std::exit(EXIT_SUCCESS);
     }
 
     add_history(line.get());
 
-    try
-    {
-      tokens_squence_t tokens;
-      std::string tokensstr { };
-      generate_tokens(tokens, line.get());
-      stringify_tokens(tokensstr, tokens, tokens_string_format::k_multiline);
-      std::cout << tokensstr << '\n';
-    }
-    catch (const std::exception& e)
-    {
-      std::cerr << e.what();
-    }
+    lexemn::internal::characters_stream chstream { line.get() };
+
+    lexer.book()->push_page_from_stream(chstream);
+    lexer.lex();
   }
 
   return EXIT_SUCCESS;

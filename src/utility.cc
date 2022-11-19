@@ -1,5 +1,5 @@
 /*
- * interpreter.h -- the interpreter for the lexemn language
+ * utilities.cc --
  *  ___       _______      ___    ___ _______   _____ ______   ________
  * |\  \     |\  ___ \    |\  \  /  /|\  ___ \ |\   _ \  _   \|\   ___  \
  * \ \  \    \ \   __/|   \ \  \/  / | \   __/|\ \  \\\__\ \  \ \  \\ \  \
@@ -29,11 +29,14 @@
  * Lexemn. If not, see <https://www.gnu.org/licenses/>.
  **/
 
-#ifndef INTERPRETER_H
-#define INTERPRETER_H
+#include "lexemn/utility.h"
 
-class interpreter
+namespace lexemn::utility
 {
-};
-
-#endif
+  namespace regex
+  {
+    std::regex digit("^(([0-9]*)|(([0-9]*)\\.([0-9]*)))$");
+    std::regex arithmetic_operator("[\\^+\\-*\\/]");
+    std::regex identifier("[a-zA-Z]");
+  }
+}

@@ -1,5 +1,5 @@
 /*
- * parser.h -- the syntax analyzer
+ * utility.h -- utility objects for lexemn
  *  ___       _______      ___    ___ _______   _____ ______   ________
  * |\  \     |\  ___ \    |\  \  /  /|\  ___ \ |\   _ \  _   \|\   ___  \
  * \ \  \    \ \   __/|   \ \  \/  / | \   __/|\ \  \\\__\ \  \ \  \\ \  \
@@ -29,11 +29,20 @@
  * Lexemn. If not, see <https://www.gnu.org/licenses/>.
  **/
 
-#ifndef PARSER_H
-#define PARSER_H
+#ifndef UTILITY_H
+#define UTILITY_H
 
-class parser
+#include <regex>
+
+namespace lexemn::utility
 {
-};
 
-#endif
+namespace regex
+{
+  extern std::regex digit;
+  extern std::regex arithmetic_operator;
+  extern std::regex identifier;
+}
+
+}
+#endif /* UTILITY_H */

@@ -43,7 +43,7 @@ book::book() noexcept
   : page { nullptr }
   , pages_count { 0 }
   , m_current_token { nullptr }
-  , m_token_stream { nullptr }
+  , m_tokens_stream { nullptr }
   , m_hash_table { nullptr }
   , m_date { "" }
   , m_time { "" }
@@ -52,8 +52,8 @@ book::book() noexcept
 
 /* Allocates a new page buffer based on the given stream of charactrs.  Then
    insertes the buffer onto the top of the pages stack of the current book, and
-   laters increments pages count in one unit.  */
-void book::push_page_from_stream(characters_stream& chstream) noexcept
+   laters increments pages count in one unit.  Returns the pages count.  */
+unsigned int book::push_page_from_stream(characters_stream& chstream) noexcept
 {
   if (this->page == nullptr)
   {
@@ -65,7 +65,7 @@ void book::push_page_from_stream(characters_stream& chstream) noexcept
     this->page = std::make_shared<page_buffer>(
           std::make_shared<characters_stream>(std::move(chstream)), this->page);
   }
-  this->pages_count++;
+  return this->pages_count++;
 }
 
 }
