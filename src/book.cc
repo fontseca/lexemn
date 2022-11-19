@@ -53,17 +53,17 @@ book::book() noexcept
 /* Allocates a new page buffer based on the given stream of charactrs.  Then
    insertes the buffer onto the top of the pages stack of the current book, and
    laters increments pages count in one unit.  */
-void book::push_page_from_stream(character_stream& chstream) noexcept
+void book::push_page_from_stream(characters_stream& chstream) noexcept
 {
   if (this->page == nullptr)
   {
     this->page = std::make_shared<page_buffer>(
-          std::make_shared<character_stream>(std::move(chstream)));
+          std::make_shared<characters_stream>(std::move(chstream)));
   }
   else
   {
     this->page = std::make_shared<page_buffer>(
-          std::make_shared<character_stream>(std::move(chstream)), this->page);
+          std::make_shared<characters_stream>(std::move(chstream)), this->page);
   }
   this->pages_count++;
 }
