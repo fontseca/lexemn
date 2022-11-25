@@ -45,6 +45,7 @@
 cmake-build-*/
 bin/
 tmp/
+obj/
 .vscode/
 .idea
 
