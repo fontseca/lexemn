@@ -33,12 +33,26 @@
 #ifndef INTERNAL_H
 #define INTERNAL_H
 
-#include <string.h>
+#include <cstring>
 
+#include <iostream>
 #include <memory>
 #include <string>
 #include <sstream>
 #include <vector>
+#include <functional>
+#include <initializer_list>
+#include <any>
+
+#ifndef DEREFER
+/* Gets the address wrapped by a smart pointer.  */
+#define DEREFER(ptr) ptr.get()
+#endif
+
+#ifndef RESET
+/* Resets a smart pointer.  */
+#define RESET(ptr, value) ptr.reset(value)
+#endif
 
 /* For ambiguous symbols like "|" that can mean "the cardinality of..." (if has
    an ending) or "such that", the lexer must provide enough information of the
@@ -53,6 +67,7 @@
 /* The mathematical symbols that appear in the following table were extracted
    from https://www.rapidtables.com/math/symbols/Basic_Math_Symbols.html.  */
 
+#ifndef TOKEN_TYPES_TABLE
 #define TOKEN_TYPES_TABLE            \
                                      \
   /* Mathematical constants.  */     \
@@ -154,6 +169,7 @@
   MISC_OP(COMMA,              ",")   \
   MISC_OP(SEMICOLON,          ";")   \
   MISC_OP(HELP,               "?")
+#endif
 
 #define CONSTANT(name, symbol) LEXEMN_CONST_ ## name,
 #define ARITH_OP(name, symbol) LEXEMN_ARITH_OP_ ## name,
@@ -170,7 +186,7 @@ namespace lexemn::internal
 
 /* The characters stream is the content of a source file.  It is the main source of
    intput that uses the lexer.  */
-typedef std::ostringstream characters_stream;
+typedef char *characters_stream;
 
 /* Stream of erros that emits either the lexer, parser or interpreter.  */
 typedef std::ostringstream errors_stream;
@@ -196,7 +212,7 @@ typedef std::vector<token_t> tokens_squence_t;
 
 /* Forward declaration for `class book'.  */
 
-class book;
+class lexemn_book;
 
 /* The type of any lexemn token.  */
 enum class token_type : unsigned char
@@ -229,7 +245,7 @@ class hash_table
   unsigned int elements;
 
   /* Current book.  */
-  std::unique_ptr<book> pbook;
+  std::unique_ptr<lexemn_book> pbook;
 
   /* Usage statistics.  */
 
@@ -257,25 +273,16 @@ struct lexemn_token
    `--interactive' is set, then each typed expression is treated as a single
    page and are pushed onto a stack  (this behaviour also aplies when interpreting
    several Lexemn files)  in the `class book' data structure.  */
-struct page_buffer
+struct lexemn_page
 {
-  /* Constructs a new page.  */
-  page_buffer(const std::shared_ptr<characters_stream>& chstream,
-          const std::shared_ptr<page_buffer>& previous_buffer = nullptr) noexcept
-    : prev { previous_buffer }
-    , buf { chstream }
-    , current_char { '\0' }
-  {
-  }
-
   /* Previous page.  */
-  std::shared_ptr<page_buffer> prev;
+  std::shared_ptr<lexemn_page> prev;
 
   /* The actual content of the page.  */
-  std::shared_ptr<characters_stream> buf;
+  characters_stream buffer;
 
   /* Current grapheme been used.  */
-  unsigned char current_char; 
+  char current; 
 };
 
 /* Abstracts a token stream the lexer feeds to the parser.  */
@@ -297,29 +304,61 @@ struct tokens_stream
 /* Arranges a sequence of page buffers in an stack.  Each page node is either an
    abstraction of logical lxm file or a single line expression when Lexemn is
    running in `--interactive' mode. */
-class book
+class lexemn_book
 {
+  /* Determines the way that the stringified token stream is generated.  */
+  enum struct strformat : unsigned char
+  {
+    /* Token stream in one line.  */
+    ONELINE,
+
+    /* Token stream in several lines.  One line per token.  */
+    MULTILINE
+  };
+
 public:
-  book() noexcept;
+  lexemn_book() noexcept;
 
   /* The top of the pages buffer stack.  */
-  std::shared_ptr<page_buffer> page;
+  std::shared_ptr<lexemn_page> head;
 
-  /* Count of page buffer.  */
-  unsigned int pages_count;
+  /* Number of pages.  */
+  std::uint32_t pages_count;
 
-  unsigned int push_page_from_stream(characters_stream& chstream) noexcept;
+  std::uint32_t push_page_from_stream(const characters_stream chstream) noexcept;
+
+  void stringify_tokens_stream(const strformat format = strformat::MULTILINE) const noexcept;
+
+  /* Traverse the stack in reverse order.  */
+  void traverse_reverse(std::shared_ptr<lexemn_page> head,
+        std::function<void(std::shared_ptr<lexemn_page>,
+            std::initializer_list<std::any>)> callback,
+                std::initializer_list<std::any> rest = { }) const noexcept
+  {
+    if (head == nullptr)
+    {
+      return;
+    }
+
+    this->traverse_reverse(head->prev, callback, rest);
+    callback(head, rest);
+  }
 
 private:
   /* Current token being lexed.  */
-  std::unique_ptr<lexemn_token> m_current_token;
+  std::unique_ptr<lexemn_token> current_token;
 
   /* Pointer to the last tokens stream.  */
-  std::unique_ptr<tokens_stream> m_tokens_stream;
+  std::unique_ptr<tokens_stream> tokens;
 
-  std::unique_ptr<hash_table> m_hash_table;
-  std::string m_date;
-  std::string m_time;
+  /* Pointer to symbol table.  */
+  std::unique_ptr<hash_table> symb_table;
+
+  /* Date of lexing.  */
+  std::string date;
+
+  /* Time of lexing.  */
+  std::string time;
 };
 
 /* The lexical analyzer takes a raw string as its input and converts it into a
@@ -348,16 +387,6 @@ private:
    parser's job to catch errors.  */
 class lexer
 {
-  /* Determines the way that the stringified token stream is generated.  */
-  enum struct strformat : unsigned char
-  {
-    /* Token stream in one line.  */
-    ONELINE,
-
-    /* Token stream in several lines.  One line per token.  */
-    MULTILINE
-  };
-
 public:
   lexer() = default;
 
@@ -365,11 +394,11 @@ public:
 
   lexer(lexer &&) = delete;
 
-  lexer(std::unique_ptr<internal::book>&& pbook) noexcept;
+  lexer(std::unique_ptr<internal::lexemn_book>&& pbook) noexcept;
 
-  void book(std::unique_ptr<internal::book> pbook) noexcept;
+  void set_book(std::unique_ptr<internal::lexemn_book> pbook) noexcept;
   
-  const std::unique_ptr<internal::book> &book() noexcept;
+  const std::unique_ptr<internal::lexemn_book> &get_book() noexcept;
 
   void lex() noexcept;
 
@@ -380,14 +409,21 @@ private:
 
   void lex_number() noexcept;
 
-  void stringify_tokens(std::string &str,
-      const tokens_squence_t &tokens,
-          const strformat strformat = strformat::MULTILINE) noexcept;
+  void lex_identifier() noexcept;
+
+  void lex_arithmetic_operator() noexcept;
+
+  void skip_blank() noexcept;
+
+  void flush_errors() const;
 
 private:
   /* Pointer to a `class book'.  When a new page is pushed onto the current
      `class book', the lexer starts lexing that page.  */
-  std::unique_ptr<internal::book> m_book;
+  std::unique_ptr<internal::lexemn_book> book;
+
+  /* Stream of lexical errors detected by the lexer.  */
+  errors_stream errors;
 };
 
 #undef CONSTANT

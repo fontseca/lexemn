@@ -32,6 +32,9 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 #include <getopt.h>
+#include <csignal>
+#include <cctype>
+
 #include <regex>
 
 #include "lexemn/internal.h"
@@ -46,12 +49,18 @@
 #define UNC_PROMPT(P) P " "           /* Uncolored prompt.  */
 
 /* Abstracts the way Lexemn runs.  */
-struct running_mode
+static struct running_mode
 {
+  unsigned char interactive : 1;
   unsigned char quiet : 1;
   unsigned char debug : 1;
   unsigned char color : 1;
-} x { .quiet { false }, .debug { false }, .color { false } };
+} x {
+  .interactive { true },
+  .quiet { false },
+  .debug { false },
+  .color { false },
+};
 
 #define PROMPT(P) x.color  \
   ? C_PROMPT(#P)     \
@@ -69,7 +78,7 @@ static struct option const long_options[] =
 };
 
 /* Displays verbose welcoming.  */
-void emit_welcome()
+static void emit_welcome()
 {
   if (x.color)
   {
@@ -143,7 +152,7 @@ expressions, plotting functions and solving equations.\n\
 }
 
 /* Displays current version.  */
-void emit_version()
+static void emit_version()
 {
   std::fprintf(stdout, "\
 %s %s Copyright (C) 2022 by Jeremy Fonseca <fonseca.dev@outlook.com>\n",
@@ -151,9 +160,36 @@ void emit_version()
   std::exit(EXIT_SUCCESS);
 }
 
+static const auto line_buffer_deleter = [](char *const buffer)
+{
+  std::free(buffer);
+};
+
+static std::unique_ptr<char[], decltype(line_buffer_deleter)> line_buffer;
+
+/* Initialize lexer with a book by default.  */
+
+static lexemn::internal::lexer lexer(
+    std::make_unique<lexemn::internal::lexemn_book>());
+
+/* Singnal handler.  */
+static void signal_handler(const int signum)
+{
+  switch (signum)
+  {
+    case SIGINT: case SIGTERM:
+    {
+      RESET(line_buffer, nullptr);
+      lexer.~lexer();
+      std::exit(EXIT_SUCCESS);
+    }
+
+  }
+}
+
 std::int32_t main(std::int32_t argc, char **argv)
 {
-  char c;
+  std::int8_t c;
 
   while (c = getopt_long(
         argc, argv, "cqvdh", long_options, NULL), c ^ -1)
@@ -202,44 +238,50 @@ std::int32_t main(std::int32_t argc, char **argv)
     emit_welcome();
   }
 
-  /* Initialize lexer with a book by default.  */
-
-  lexemn::internal::lexer lexer(
-        std::make_unique<lexemn::internal::book>());
-
-  for (;;)
+  if (x.interactive)
   {
-    std::unique_ptr<char[], decltype(&std::free)> line(
-          readline(PROMPT(::/)), std::free);
+    std::signal(SIGINT, signal_handler);
+    std::signal(SIGTERM, signal_handler);
 
+    while (RESET(line_buffer, static_cast<char *>(readline(PROMPT(::/)))),
+              NULL != DEREFER(line_buffer))
+    {
+#ifdef PROMPT
 #undef PROMPT
+#endif
+
+#ifdef C_PROMPT
 #undef C_PROMPT
+#endif
+
+#ifdef UNC_PROMPT
 #undef UNC_PROMPT
+#endif
 
-    if (std::regex_search(line.get(),
-        std::regex("^[[:space:]]*$",
-            std::regex_constants::grep)))
-    {
-      continue;
+      if (0 == line_buffer[0] /* when EOL  */
+              || std::isspace(static_cast<std::uint8_t>(line_buffer[0])))
+      {
+        continue;
+      }
+
+      /* FIXME: Use a builtin procedure for quitting.  */
+
+      if (0 == strcmp(DEREFER(line_buffer), "quit()")
+            || 0 == strcmp(DEREFER(line_buffer), "q()"))
+      {
+        line_buffer.reset(nullptr);
+        lexer.~lexer();
+        break;
+      }
+
+      add_history(DEREFER(line_buffer));
+
+      lexemn::internal::characters_stream chstream { nullptr };
+      chstream = strdup(DEREFER(line_buffer));
+
+      lexer.get_book()->push_page_from_stream(chstream);
+      lexer.lex();
     }
-
-    /* FIXME: Consider using a procedure for correct quitting when recieving a
-       signal.  */
-
-    if (!strcmp(line.get(), "quit()")
-          || !strcmp(line.get(), "q()"))
-    {
-      line.reset(nullptr);
-      lexer.~lexer();
-      std::exit(EXIT_SUCCESS);
-    }
-
-    add_history(line.get());
-
-    lexemn::internal::characters_stream chstream { line.get() };
-
-    lexer.book()->push_page_from_stream(chstream);
-    lexer.lex();
   }
 
   return EXIT_SUCCESS;
