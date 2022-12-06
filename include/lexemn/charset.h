@@ -1,5 +1,5 @@
 /*
- * utilities.cc --
+ * charset.h -- character set handling 
  *  ___       _______      ___    ___ _______   _____ ______   ________
  * |\  \     |\  ___ \    |\  \  /  /|\  ___ \ |\   _ \  _   \|\   ___  \
  * \ \  \    \ \   __/|   \ \  \/  / | \   __/|\ \  \\\__\ \  \ \  \\ \  \
@@ -29,21 +29,18 @@
  * Lexemn. If not, see <https://www.gnu.org/licenses/>.
  **/
 
-#include "lexemn/internal.h"
-#include "lexemn/utility.h"
+#ifndef CHARSET_H
+#define CHARSET_H
 
-namespace lexemn::utility
+#include <cstdint>
+
+namespace lexemn::charset
 {
 
-internal::characters_stream duplicate_stream(
-  internal::characters_stream src,
-    std::size_t n) noexcept
-{
-  internal::characters_stream dest = new char[n];
-  return dest == nullptr
-    ? nullptr
-      : static_cast<internal::characters_stream>(
-        std::memcpy(dest, src, n));
-}
+bool unicode_valid_in_identifier(std::uint32_t ch) noexcept;
+
+bool unicode_valid_in_number(std::uint32_t ch) noexcept;
 
 }
+
+#endif /* CHARSET_H */

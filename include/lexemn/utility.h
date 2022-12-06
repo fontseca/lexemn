@@ -34,15 +34,14 @@
 
 #include <regex>
 
+#include "lexemn/internal.h"
+
 namespace lexemn::utility
 {
 
-namespace regex
-{
-  extern std::regex digit;
-  extern std::regex arithmetic_operator;
-  extern std::regex identifier;
+internal::characters_stream duplicate_stream(
+  internal::characters_stream src,
+    std::size_t n) noexcept;
 }
 
-}
 #endif /* UTILITY_H */

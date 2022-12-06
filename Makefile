@@ -55,7 +55,7 @@ ECHO_RDONE := echo -e "\e[1;91m(Done)\e[0m"
 all: question $(OBJDIR) $(NAME)
 
 $(NAME): $(OBJS) | $(OUTDIR)
-	echo -n "Linking into $(NAME)... "
+	echo -n "Linking into '$(NAME)'... "
 	$(CXX) $(CXXFLAGS) -o $(NAME) $(OBJS) $(LIBS)
 	$(ECHO_GDONE)
 

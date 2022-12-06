@@ -181,6 +181,9 @@
 #define REL_OP(name, symbol) LEXEMN_REL_OP_ ## name,
 #define MISC_OP(name, symbol) LEXEMN_MISC_OP_ ## name,
 
+/* Defines the default size of the buffer of tokens.  */
+#define TOKENS_BUFFER_SIZE 64
+
 namespace lexemn::internal
 {
 
@@ -191,38 +194,29 @@ typedef char *characters_stream;
 /* Stream of erros that emits either the lexer, parser or interpreter.  */
 typedef std::ostringstream errors_stream;
 
-/* Types for backward compatibility with the old lexer version.  */
-
-enum struct token_name
-{
-  lxmn_identifier,
-  lxmn_keywork,
-  lxmn_separator,
-  lxmn_operator,
-  lxmn_number,
-  lxmn_string,
-  lxmn_assignment,
-  lxmn_closing_parenthesis,
-  lxmn_opening_parenthesis,
-};
-
-typedef std::string token_value_t;
-typedef std::pair<token_value_t, token_name> token_t;
-typedef std::vector<token_t> tokens_squence_t;
-
 /* Forward declaration for `class book'.  */
 
 class lexemn_book;
 
 /* The type of any lexemn token.  */
-enum class token_type : unsigned char
+enum token_type
 {
   TOKEN_TYPES_TABLE
-  LEXEMN_KEYWORD,
   LEXEMN_IDENTIFIER,
-  LEXEMN_INTEGER,
-  LEXEMN_DOUBLE,
+  LEXEMN_NUMBER,
+  LEXEMN_KEYWORD,
+  N_TOKEN_TYPES
 };
+
+#undef CONSTANT
+#undef ARITH_OP
+#undef ALG_OP
+#undef LIN_ALG_OP
+#undef SET_OP
+#undef BITW_OP
+#undef LOGIC_OP
+#undef REL_OP
+#undef MISC_OP
 
 /* Entry node for a hash table.  */
 struct hash_table_node
@@ -258,14 +252,28 @@ class hash_table
 /* Abstracts a valid Lexemn token.  */
 struct lexemn_token
 {
+  using pointer = std::unique_ptr<lexemn_token>;
+
+  lexemn_token &operator=(lexemn_token &&other) noexcept
+  {
+    if (this != &other)
+    {
+      this->value = std::move(other.value);
+      this->type = other.type;
+      this->position = other.position;
+    }
+
+    return *this;
+  }
+
   /* The type of the token.  */
   token_type type;
 
   /* The actual token value as an string.  */
-  const unsigned char *value;
+  std::string value;
 
   /* The position of the token in the token stream.  */
-  unsigned int position;
+  std::uint32_t position;
 };
 
 /* Symbolizes a set of expressions written in one single page of a book.  It also
@@ -275,30 +283,48 @@ struct lexemn_token
    several Lexemn files)  in the `class book' data structure.  */
 struct lexemn_page
 {
+  using pointer = std::unique_ptr<lexemn_page>;
+
   /* Previous page.  */
-  std::shared_ptr<lexemn_page> prev;
+  lexemn_page *prev;
 
   /* The actual content of the page.  */
   characters_stream buffer;
 
-  /* Current grapheme been used.  */
-  char current; 
+  /* Pointert to exactly where the lexer is in the stream of source code.  */
+  char *current;
+
+  /* Pointer to the current line being lexed.  */
+  characters_stream line;
+
+  /* The length of the buffer.  */
+  std::size_t len;
+
+  ~lexemn_page() noexcept
+  {
+    if (nullptr not_eq this->buffer)
+    {
+      delete[] buffer;
+    }
+  }
 };
 
-/* Abstracts a token stream the lexer feeds to the parser.  */
-struct tokens_stream
+/* Abstracts a buffer of tokens allocated for each line.  */
+struct tokens_buffer
 {
-  /* Previous tokens stream.  */
-  std::unique_ptr<tokens_stream> prev;
+  using pointer = std::unique_ptr<tokens_buffer>;
 
-  /* Next tokens stream.  */
-  std::unique_ptr<tokens_stream> next;
+  /* Pointer to the previous buffer of tokens.  */
+  tokens_buffer *prev;
+
+  /* Pointer to the next buffer of tokens.  */
+  pointer next;
   
-  /* The first token in the stream.  */
-  std::unique_ptr<lexemn_token> head_token;
+  /* The actual buffer.  */
+  std::unique_ptr<lexemn_token[]> base;
 
-  /* The last token in the stream.  */
-  std::unique_ptr<lexemn_token> tail_token;
+  /* Pointer to the last token.  */
+  lexemn_token *limit;
 };
 
 /* Arranges a sequence of page buffers in an stack.  Each page node is either an
@@ -306,6 +332,9 @@ struct tokens_stream
    running in `--interactive' mode. */
 class lexemn_book
 {
+private:
+  friend class lexer;
+
   /* Determines the way that the stringified token stream is generated.  */
   enum struct strformat : unsigned char
   {
@@ -317,21 +346,28 @@ class lexemn_book
   };
 
 public:
+  using pointer = std::unique_ptr<lexemn_book>;
+
+  /* Pointer to the next token in the buffer.  */
+  lexemn_token *m_next;
+
+  /* Pointer to the current buffer of tokens.  */
+  tokens_buffer *m_current_buffer;
+
+  /* Pointer to the first buffer of tokens.  */
+  tokens_buffer::pointer m_base_buffer;
+
   lexemn_book() noexcept;
-
-  /* The top of the pages buffer stack.  */
-  std::shared_ptr<lexemn_page> head;
-
-  /* Number of pages.  */
-  std::uint32_t pages_count;
 
   std::uint32_t push_page_from_stream(const characters_stream chstream) noexcept;
 
-  void stringify_tokens_stream(const strformat format = strformat::MULTILINE) const noexcept;
+  void init_token_buffer(tokens_buffer *buff, std::uint32_t count) noexcept;
 
-  /* Traverse the stack in reverse order.  */
-  void traverse_reverse(std::shared_ptr<lexemn_page> head,
-        std::function<void(std::shared_ptr<lexemn_page>,
+  tokens_buffer *next_tokens_buffer(tokens_buffer *buff, std::uint32_t count) noexcept;
+
+  /* Traverse the pages stack in reverse order.  */
+  void traverse_reverse(lexemn_page *head,
+        std::function<void(lexemn_page *,
             std::initializer_list<std::any>)> callback,
                 std::initializer_list<std::any> rest = { }) const noexcept
   {
@@ -345,20 +381,20 @@ public:
   }
 
 private:
-  /* Current token being lexed.  */
-  std::unique_ptr<lexemn_token> current_token;
+  /* The top of the pages buffer stack.  */
+  lexemn_page::pointer m_head;
 
-  /* Pointer to the last tokens stream.  */
-  std::unique_ptr<tokens_stream> tokens;
+  /* Number of pages.  */
+  std::uint32_t m_pages_count;
 
   /* Pointer to symbol table.  */
-  std::unique_ptr<hash_table> symb_table;
+  std::unique_ptr<hash_table> m_symbol_table;
 
   /* Date of lexing.  */
-  std::string date;
+  std::string m_date;
 
   /* Time of lexing.  */
-  std::string time;
+  std::string m_time;
 };
 
 /* The lexical analyzer takes a raw string as its input and converts it into a
@@ -390,22 +426,42 @@ class lexer
 public:
   lexer() = default;
 
-  ~lexer();
+  explicit lexer(lexemn_book::pointer &&pbook) noexcept;
 
+  /* No move constructor.  */
   lexer(lexer &&) = delete;
 
-  lexer(std::unique_ptr<internal::lexemn_book>&& pbook) noexcept;
+  /* No copy constructor.  */
+  lexer(const lexer &) = delete;
 
-  void set_book(std::unique_ptr<internal::lexemn_book> pbook) noexcept;
+  /* No copy assignment operator.  */
+  lexer& operator=(const lexer &) = delete;
+
+  /* No move assignment operator.  */
+  lexer& operator=(lexer &&) = delete;
+
+  ~lexer() noexcept;
+
+  void set_book(lexemn_book::pointer pbook) noexcept;
   
-  const std::unique_ptr<internal::lexemn_book> &get_book() noexcept;
+  const lexemn_book::pointer &get_book() const noexcept;
 
   void lex() noexcept;
 
 private:
-  tokens_squence_t make_tokens();
-  
-  const std::unique_ptr<lexemn_token> lex_token() noexcept;
+  enum struct error_type : std::uint8_t
+  {
+    unknown_symbol,
+    stray_symbol,
+  };
+
+  void push_token(lexemn_token::pointer token) noexcept;
+
+  const lexemn_token::pointer lex_token() noexcept;
+
+  lexemn_token::pointer allocate_token(const token_type type) const noexcept;
+
+  void spell_token() const noexcept;
 
   void lex_number() noexcept;
 
@@ -415,26 +471,28 @@ private:
 
   void skip_blank() noexcept;
 
-  void flush_errors() const;
+  void enqueue_error() noexcept;
+
+  bool inline eol() const noexcept;
+
+  bool inline eos() const noexcept;
+
+  bool inline eof() const noexcept;
+
+  bool inline blank() const noexcept;
+
+  bool flush_errors();
+
+  void stringify_token_buffer() const noexcept;
 
 private:
   /* Pointer to a `class book'.  When a new page is pushed onto the current
      `class book', the lexer starts lexing that page.  */
-  std::unique_ptr<internal::lexemn_book> book;
+  lexemn_book::pointer m_book;
 
   /* Stream of lexical errors detected by the lexer.  */
-  errors_stream errors;
+  errors_stream m_errors;
 };
-
-#undef CONSTANT
-#undef ARITH_OP
-#undef ALG_OP
-#undef LIN_ALG_OP
-#undef SET_OP
-#undef BITW_OP
-#undef LOGIC_OP
-#undef REL_OP
-#undef MISC_OP
 
 }
 

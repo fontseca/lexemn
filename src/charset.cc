@@ -1,5 +1,5 @@
 /*
- * utilities.cc --
+ * lexer.cc -- lexer implementation for lexemn
  *  ___       _______      ___    ___ _______   _____ ______   ________
  * |\  \     |\  ___ \    |\  \  /  /|\  ___ \ |\   _ \  _   \|\   ___  \
  * \ \  \    \ \   __/|   \ \  \/  / | \   __/|\ \  \\\__\ \  \ \  \\ \  \
@@ -29,21 +29,58 @@
  * Lexemn. If not, see <https://www.gnu.org/licenses/>.
  **/
 
-#include "lexemn/internal.h"
-#include "lexemn/utility.h"
+#include <cstdio>
+#include <cuchar>
 
-namespace lexemn::utility
+#include <iostream>
+
+#include "lexemn/charset.h"
+
+namespace lexemn::charset
 {
 
-internal::characters_stream duplicate_stream(
-  internal::characters_stream src,
-    std::size_t n) noexcept
+bool unicode_valid_in_identifier(std::uint32_t ch) noexcept
 {
-  internal::characters_stream dest = new char[n];
-  return dest == nullptr
-    ? nullptr
-      : static_cast<internal::characters_stream>(
-        std::memcpy(dest, src, n));
+
+  if (ch >= 0x0041 && ch <= 0x005A)
+  {
+    return true;
+  }
+  else if (ch >= 0x0061 && ch <= 0x007A)
+  {
+    return true;
+  }
+  else if (ch == 0x1f34c)
+  {
+    return true;
+  }
+  else if (ch == 0x00D1)
+  {
+    return true;
+  }
+  else if (ch == 0x0393)
+  {
+    return true;
+  }
+  else if (ch == 0x03b6)
+  {
+    return true;
+  }
+  else if (ch == 0x03BE)
+  {
+    return true;
+  }
+
+  return false;
+}
+
+bool unicode_valid_in_number(std::uint32_t ch) noexcept
+{
+  if (ch >= 0x0030 && ch <= 0x0039)
+  {
+    return true;
+  }
+  return false;
 }
 
 }

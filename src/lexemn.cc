@@ -38,6 +38,7 @@
 #include <regex>
 
 #include "lexemn/internal.h"
+#include "lexemn/utility.h"
 
 #define VERSION  "v0.1"               /* Latest Lexemn version.  */
 #define PROGNAME "lexemn"
@@ -52,11 +53,13 @@
 static struct running_mode
 {
   unsigned char interactive : 1;
+  unsigned char no_readline : 1;
   unsigned char quiet : 1;
   unsigned char debug : 1;
   unsigned char color : 1;
 } x {
   .interactive { true },
+  .no_readline { false },
   .quiet { false },
   .debug { false },
   .color { false },
@@ -66,13 +69,14 @@ static struct running_mode
   ? C_PROMPT(#P)     \
   : UNC_PROMPT(#P)
 
-static struct option const long_options[] =
+static const option long_options[] =
 {
     {"quiet", no_argument, NULL, 'q'},
     {"color", no_argument, NULL, 'c'},
     {"debug", no_argument, NULL, 'd'},
     {"version", no_argument, NULL, 'v'},
     {"help", no_argument, NULL, 'h'},
+    {"no-readline", no_argument, NULL, 'n'},
     {"verbose", no_argument, NULL, 0},
     {NULL, 0, NULL, 0},
 };
@@ -117,7 +121,7 @@ Invoke `help()' for further information; and `quit()' or `q()' to exit.\n\
 }
 
 /* Displays usage guide.  */
-void usage(std::int32_t status)
+static void usage(std::int32_t status)
 {
   if (EXIT_SUCCESS ^ status)
   {
@@ -137,6 +141,7 @@ expressions, plotting functions and solving equations.\n\
     std::fputs("\
   -q, --quiet                  do not display welcome message\n\
   -c, --color                  be colourful\n\
+  -n, --no-readline            do not use GNU Readline to avoid memory leaks\n\
   -d, --debug                  display debugging messages\n\
   -h, --help                   display this information\n\
   -v, --version                display current version\n\
@@ -166,14 +171,11 @@ static const auto line_buffer_deleter = [](char *const buffer)
 };
 
 static std::unique_ptr<char[], decltype(line_buffer_deleter)> line_buffer;
-
-/* Initialize lexer with a book by default.  */
-
-static lexemn::internal::lexer lexer(
-    std::make_unique<lexemn::internal::lexemn_book>());
+static auto book = std::make_unique<lexemn::internal::lexemn_book>();
+static lexemn::internal::lexer lexer(std::move(book));
 
 /* Singnal handler.  */
-static void signal_handler(const int signum)
+[[noreturn]] static void signal_handler(const std::int32_t signum) noexcept
 {
   switch (signum)
   {
@@ -181,18 +183,22 @@ static void signal_handler(const int signum)
     {
       RESET(line_buffer, nullptr);
       lexer.~lexer();
-      std::exit(EXIT_SUCCESS);
+      RESET(book, nullptr);
     }
-
   }
+
+  std::putchar(10);
+  std::exit(EXIT_SUCCESS);
 }
 
 std::int32_t main(std::int32_t argc, char **argv)
 {
+  std::setlocale(LC_ALL, "");
+
   std::int8_t c;
 
   while (c = getopt_long(
-        argc, argv, "cqvdh", long_options, NULL), c ^ -1)
+        argc, argv, "cqvdhn", long_options, NULL), c ^ -1)
   {
     if (c == '?')
     {
@@ -226,6 +232,11 @@ std::int32_t main(std::int32_t argc, char **argv)
       ::emit_version();
       break;
     }
+    case 'n':
+    {
+      x.no_readline = true;
+      break;
+    }
     default:
       ::usage(EXIT_FAILURE);
     }
@@ -243,9 +254,32 @@ std::int32_t main(std::int32_t argc, char **argv)
     std::signal(SIGINT, signal_handler);
     std::signal(SIGTERM, signal_handler);
 
-    while (RESET(line_buffer, static_cast<char *>(readline(PROMPT(::/)))),
-              NULL != DEREFER(line_buffer))
+    if (x.no_readline)
     {
+      RESET(line_buffer, static_cast<char *>(malloc(sizeof(char[256]))));
+      char ch;
+
+      for (;;)
+      {
+        std::clearerr(stdin);
+        std::memset(DEREFER(line_buffer), '\0', 256);
+        
+        while (ch = fgetc(stdin), ch != -1)
+        {
+          char s[2] = { ch, '\0'};
+          std::strcat(DEREFER(line_buffer), s);
+        }
+
+        lexer.get_book()->push_page_from_stream(DEREFER(line_buffer));
+        lexer.lex();
+      }
+    }
+    else
+    {
+      while (RESET(line_buffer, static_cast<char *>(
+        readline(PROMPT(::/)))),
+          NULL not_eq DEREFER(line_buffer))
+      {
 #ifdef PROMPT
 #undef PROMPT
 #endif
@@ -258,29 +292,27 @@ std::int32_t main(std::int32_t argc, char **argv)
 #undef UNC_PROMPT
 #endif
 
-      if (0 == line_buffer[0] /* when EOL  */
-              || std::isspace(static_cast<std::uint8_t>(line_buffer[0])))
-      {
-        continue;
+        if (0 == line_buffer[0] /* When EOL.  */
+          or std::isspace(
+            static_cast<std::uint8_t>(line_buffer[0])))
+        {
+          continue;
+        }
+
+        /* FIXME: Use a builtin procedure for quitting.  */
+
+        if (0 == std::strcmp(DEREFER(line_buffer), "quit()")
+          or 0 == std::strcmp(DEREFER(line_buffer), "q()"))
+        {
+          RESET(line_buffer, nullptr);
+          lexer.~lexer();
+          break;
+        }
+
+        add_history(DEREFER(line_buffer));
+        lexer.get_book()->push_page_from_stream(DEREFER(line_buffer));
+        lexer.lex();
       }
-
-      /* FIXME: Use a builtin procedure for quitting.  */
-
-      if (0 == strcmp(DEREFER(line_buffer), "quit()")
-            || 0 == strcmp(DEREFER(line_buffer), "q()"))
-      {
-        line_buffer.reset(nullptr);
-        lexer.~lexer();
-        break;
-      }
-
-      add_history(DEREFER(line_buffer));
-
-      lexemn::internal::characters_stream chstream { nullptr };
-      chstream = strdup(DEREFER(line_buffer));
-
-      lexer.get_book()->push_page_from_stream(chstream);
-      lexer.lex();
     }
   }
 

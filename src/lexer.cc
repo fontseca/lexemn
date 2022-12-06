@@ -29,295 +29,423 @@
  * Lexemn. If not, see <https://www.gnu.org/licenses/>.
  **/
 
+#include <cctype>
+#include <climits>
+#include <cuchar>
+
 #include <iostream>
 #include <string_view>
 #include <iomanip>
+#include <string>
 
-#include "lexemn/utility.h"
 #include "lexemn/internal.h"
+#include "lexemn/utility.h"
+#include "lexemn/charset.h"
 
 namespace lexemn::internal
 {
 
-lexer::lexer(std::unique_ptr<internal::book>&& pbook) noexcept
+lexer::lexer(lexemn_book::pointer &&pbook) noexcept
   : m_book { std::move(pbook) }
 {
 }
 
 lexer::~lexer() noexcept
 {
-  this->m_book.~unique_ptr();
+  RESET(m_book, nullptr);
 }
 
-void lexer::book(std::unique_ptr<internal::book> pbook) noexcept
+/* Sets the book to be lexed.  */
+void lexer::set_book(lexemn_book::pointer pbook) noexcept
 {
-  this->m_book = std::move(pbook);
+  m_book = std::move(pbook);
 }
 
-const std::unique_ptr<internal::book> &lexer::book() noexcept
+/* Gets the book to be lexed.  */
+const lexemn_book::pointer &lexer::get_book() const noexcept
 {
-  return this->m_book;
+  return m_book;
 }
 
-const std::unique_ptr<internal::lexemn_token> lexer::lex_token() noexcept
+const lexemn_token::pointer lexer::lex_token() noexcept
 {
   return { };
+}
+
+/* Adds a new error to the errors stream.  */
+void lexer::enqueue_error() noexcept
+{
+  std::ostringstream err { };
+  std::ptrdiff_t diff = m_book->m_head->current - m_book->m_head->line;
+  auto begin = m_book->m_head->line;
+  auto st = m_book->m_head->line;
+
+  err << "lexemn: \x1B[1;31merror:\x1B[0m unknown symbol detected near ‘"
+    << *m_book->m_head->current << "’" << '\n';
+
+  err << "     |  ";
+
+  for (;; ++st)
+  {
+    if (*begin == '\n' || *begin == EOF || *begin == '\0')
+    {
+      break;
+    }
+    else if (st == (m_book->m_head->line + diff)) /* color unwanted symbol */
+    {
+      err << "\x1B[1;31m" << *begin << "\x1B[0m";
+      ++begin;
+      continue;
+    }
+    else
+    {
+      err << *begin;
+      ++begin;
+    }
+  }
+
+  err << '\n' << "     |  " << "\x1B[1;31m"
+    << std::setw(diff + 1) << "^" << "\x1B[0m" << '\n';
+  m_errors << err.str() << '\n';
+}
+
+/* Flushes errors to stderr.  */
+bool lexer::flush_errors()
+{
+  std::cerr << m_errors.str();
+  m_errors.clear();
+  m_errors.str(std::string());
+  return m_errors.str().empty();
 }
 
 /* Lexes a number to  `token_type::LEXEMN_INTEGER'.  */
 void lexer::lex_number() noexcept
 {
+  auto result { allocate_token(LEXEMN_NUMBER) };
+  auto current = &m_book->m_head->current;
+
+  /* When a number is preceded by `-' or `+'.  Generally this should be
+     executed once.  */
+  switch (**current)
+  {
+    case '+': case '-':
+    {
+      result->value += **current, ++*current;
+      break;
+    }
+  }
+
+  if ('.' == **current)
+  {
+      result->value += **current, ++*current;
+  }
+
+  for (;;)
+  {
+    switch (**current)
+    {
+      case '0': case '1': case '2': case '3': case '4':
+      case '5': case '6': case '7': case '8': case '9':
+      {
+        result->value += **current, ++*current;
+        continue;
+      }
+    }
+
+    if (**current == '.')
+    {
+      enqueue_error();
+    }
+
+    /* When `e' or `E'.  */
+    switch (**current)
+    {
+      case 'e': case 'E':
+      {
+        switch (*(*current + 1))
+        {
+          case '+': case '-':
+          {
+            switch (*(*current + 2))
+            {
+              case '0': case '1': case '2': case '3': case '4':
+              case '5': case '6': case '7': case '8': case '9':
+              {
+                goto increment;
+              }
+            }
+            break;
+          }
+
+          case '0': case '1': case '2': case '3': case '4':
+          case '5': case '6': case '7': case '8': case '9':
+          {
+            goto increment;
+          }
+        }
+      }
+    }
+
+    break;
+
+    increment:
+    result->value += **current; /* Add either `e' or `E',  */
+    result->value += *(*current + 1); /* then add `+', `-' or any of [0-9].  */
+    *current += 2;
+  }
+
+  push_token(std::move(result));
 }
 
- /* Lexes the page at the top of the stack.  */
-void lexer::lex() noexcept
+/* Allocates room for a new token.  */
+lexemn_token::pointer
+lexer::allocate_token(const token_type type) const noexcept
 {
-  std::string str;
-  this->stringify_tokens(str, this->make_tokens());
-  std::cout << str << '\n';
+  auto token = std::make_unique<lexemn_token>();
+  token->type = type;
+  return token;
+}
+
+/* Adds a token to the current buffer of tokens.  */
+void lexer::push_token(lexemn_token::pointer token) noexcept
+{
+  if (nullptr not_eq m_book->m_current_buffer->base)
+  {
+    /* If the base of the current buffer of tokens needs more room,  */
+
+    if (m_book->m_current_buffer->limit == m_book->m_next)
+    {
+      std::cout << "making reallocation..." << '\n';
+
+      std::ptrdiff_t capacity =
+        2 * static_cast<std::ptrdiff_t>(m_book->m_current_buffer->limit
+          - DEREFER(m_book->m_current_buffer->base));
+
+      /* then allocate twice its previous capacity.  */
+
+      auto base = new lexemn_token[capacity];
+
+      auto token = DEREFER(m_book->m_current_buffer->base);
+      std::int32_t i { -1 };
+
+      while (token not_eq m_book->m_next)
+        *(base + ++i) = std::move(*token++);
+
+      /* (Where the next token will be in the new base.)  */
+
+      std::ptrdiff_t current = m_book->m_next
+        - DEREFER(m_book->m_current_buffer->base);
+
+      RESET(m_book->m_current_buffer->base, base);
+
+      m_book->m_current_buffer->limit = DEREFER(
+        m_book->m_current_buffer->base) + capacity;
+      
+      m_book->m_next = DEREFER(m_book->m_current_buffer->base) + current;
+    }
+
+    *m_book->m_next = std::move(*token);
+    ++m_book->m_next;
+  }
+}
+
+/* Lexes an identifier.  */
+void lexer::lex_identifier() noexcept
+{
+  auto result { allocate_token(LEXEMN_IDENTIFIER) };
+  char32_t c32 { };
+  while (std::mbrtoc32(&c32, m_book->m_head->current,
+    m_book->m_head->len, nullptr))
+  {
+    if (!charset::unicode_valid_in_identifier(c32))
+      break;
+    result->value += *m_book->m_head->current;
+    ++m_book->m_head->current;
+  }
+
+  push_token(std::move(result));
+}
+
+/* Skip blanks.  */
+void lexer::skip_blank() noexcept
+{
+  do
+    ++m_book->m_head->current;
+  while(blank());
+}
+
+/* Checks if the current character is EOL.  */
+bool inline lexer::eol() const noexcept
+{
+  return *m_book->m_head->current == '\n';
+}
+
+/* Checks if the current character is EOS (End Of String).  */
+bool inline lexer::eos() const noexcept
+{
+  return *m_book->m_head->current == '\0';
+}
+
+/* Checks if the current character is EOF.  */
+bool inline lexer::eof() const noexcept
+{
+  return *m_book->m_head->current == EOF;
+}
+
+/* Checks if the current character is blank.  */
+bool inline lexer::blank() const noexcept
+{
+  return std::isspace(
+    static_cast<std::uint8_t>(*m_book->m_head->current))
+      or std::isblank(
+        static_cast<std::uint8_t>(*m_book->m_head->current));
 }
 
 /* Converts a raw string expression with the Lexemn grammar into a sequence of
    recognized tokens that can be interpreted by the parser.  If any illegal symbol
-   is detected, then it keeps a buffer of this and any other unknown symbols as an
-   error string.  */
-tokens_squence_t lexer::make_tokens()
+   is detected, adds errors to the erros stream.  */
+void lexer::lex() noexcept
 {
-  using namespace lexemn::utility;
-  tokens_squence_t lexemes;
-  errors_stream lexical_errors { };
-  std::int32_t nlexemes { -1 };
-  std::uint8_t make_new_numeric_entry { true };
-  std::uint8_t make_new_identifier_entry { true };
-  std::uint8_t error_flag { 0 }; /* no error by default */
-  std::size_t i { };
+  /* Current character in the source stream.  */
+  characters_stream *current = &m_book->m_head->current;
+  std::size_t rc;
+  char32_t c32;
 
-  auto page = std::move(this->m_book->page);
-  unsigned int buflen = page->buf->str().size();
-
-  for (i = 0; i < buflen; ++i)
+  while ((rc = std::mbrtoc32(&c32, *current,
+    m_book->m_head->len, nullptr)))
   {
-    std::int8_t c = page->buf->str()[i];
-
-    if (std::isblank(c))
-      continue;
-
-    /* The current character must be a null terminated
-    string to seach against a valid regular expression. */
-
-    char currentch[2] { c, '\0' };
-
-    if (std::regex_search(currentch, regex::digit))
+    if (blank())
     {
-      /* If there is a separation, then we are talking
-      about another number and we're done with the
-      current one. */
+      skip_blank();
+      continue;
+    }
 
-      if (make_new_numeric_entry)
+    if (eol())
+    {
+      ++*current;
+      m_book->m_head->line = *current;
+
+      /* As soon as the current caracter is not one of these...  */
+
+      if (not eos()
+        and not eol()
+          and not eof())
       {
-        lexemes.push_back(std::make_pair("", token_name::lxmn_number));
-        nlexemes++;
-        make_new_numeric_entry = false;
-      }
+        /* allocate a new buffer for the next line  */
 
-      /* Create a string of contigous digits that form
-      a single numeric value. */
-
-      std::get<0>(lexemes[nlexemes]) += currentch;
-      continue;
-    }
-    else
-    {
-      /* Activate flag when there is an operand, an space
-      or whatever, and you find another digit, it will be
-      part of the next set (string) of digits, and not the
-      current one. Which means, they are not part of the
-      same numeric value.
-      
-      For "100 + 5", we have two sets of numbers, "100"
-      and "5", so there will be two elements for the
-      array of numbers. */
-
-      make_new_numeric_entry = true; /* you'll need a new entry. */
-    }
-
-    /* For identifiers. */
-
-    if (std::regex_search(currentch, regex::identifier))
-    {
-      if (make_new_identifier_entry)
-      {
-        lexemes.push_back(std::make_pair("", token_name::lxmn_identifier));
-        nlexemes++;
-        make_new_identifier_entry = false;
-      }
-      std::get<0>(lexemes[nlexemes]) += currentch;
-      continue;
-    }
-    else
-    {
-      make_new_identifier_entry = true;
-    }
-
-    if (c == '+' && page->buf->str()[i + 1] == '-')
-    {
-      lexemes.push_back(std::make_pair("+-", token_name::lxmn_operator));
-      
-      /* Scale i by the length of ':=' */
-      
-      i += 1;
-      ++nlexemes;
-
-      continue;
-    }
-
-    if (c == '-' && page->buf->str()[i + 1] == '+')
-    {
-      lexemes.push_back(std::make_pair("-+", token_name::lxmn_operator));
-
-      /* Scale i by the length of ':=' */
-      
-      i += 1;
-      ++nlexemes;
-
-      continue;
-    }
-
-    if (std::regex_search(currentch, regex::arithmetic_operator))
-    {
-      lexemes.push_back(std::make_pair(currentch, token_name::lxmn_operator));
-      ++nlexemes;
-      continue;
-    }
-
-    if (c == ':' && page->buf->str()[i + 1] == '=')
-    {
-      lexemes.push_back(std::make_pair(":=", token_name::lxmn_assignment));
-      
-      /* Scale i by the length of ':=' */
-      
-      i += 1;
-      ++nlexemes;
-      
-      continue;
-    }
-
-    /* When other operators. */
-
-    switch (c)
-    {
-      case '(':
-        lexemes.push_back(std::make_pair(currentch, token_name::lxmn_opening_parenthesis));
-        ++nlexemes;
-        break;
-      
-      case ')':
-        lexemes.push_back(std::make_pair(currentch, token_name::lxmn_closing_parenthesis));
-        ++nlexemes;
-        break;
-      
-      case ';':
-        lexemes.push_back(std::make_pair(currentch, token_name::lxmn_separator));
-        ++nlexemes;
-        break;
-
-      /* Report unrecognized symbols. */
-
-      default:
-      {
-        /* Ther's an error. */
+        std::cout << "making a new buffer...\n";
+        m_book->m_current_buffer = m_book->next_tokens_buffer(
+          m_book->m_current_buffer, TOKENS_BUFFER_SIZE);
         
-        error_flag = 1;
-        
-        std::ostringstream err { };
-
-        err << "lexemn: \x1B[1;31merror:\x1B[0m unknown symbol detected near `" << c << "'" << '\n';
-
-        // err << "  "                    /* left padding */
-        //     << page->Buffer.substr(0, i) /* left chunk of expression */
-        //     << "\x1B[1;31m"
-        //     << c                        /* colored illegal symbol */
-        //     << "\x1B[0m"
-        //     << expression.substr(i + 1) /* right chunk of expression */
-        //     << '\n'
-        //     << std::setw(2 + i + 1)     /* calculate width for `^' */
-        //     << "^"
-        //     << '\n';
-
-        lexical_errors << err.str();
+        /* and then point to the new buffer.  */
+        m_book->m_next = DEREFER(m_book->m_current_buffer->base);
+        std::cout << "made." << '\n';
       }
+
+      continue;
     }
+
+    switch(**current)
+    {
+      case '.':
+      {
+        if (charset::unicode_valid_in_number(*(*current + 1)))
+        {
+          lex_number();
+          continue;
+        }
+        break;
+      }
+
+      case '+': case '-':
+      {
+        switch (*(*current + 1))
+        {
+          case '.':
+          {
+            if (charset::unicode_valid_in_number(*(*current + 2)))
+            {
+              lex_number();
+              continue;
+            }
+            break;
+          }
+          case '0': case '1': case '2': case '3': case '4':
+          case '5': case '6': case '7': case '8': case '9':
+          {
+            lex_number();
+            continue;
+          }
+        } 
+        if (charset::unicode_valid_in_number(*(*current + 1)))
+        {
+          lex_number();
+          continue;
+        }
+     /* else
+        {
+          lex_arithmetic_operator();
+          continue;
+        }  */
+        break;
+      }
+
+   /* case '+': case '-': case '*':
+      case '⋅': case '/': case '÷':
+      case '^': case '%': case '‰':
+      case '.': case '!':
+      {
+        lex_arithmetic_operator();
+        break;
+      } */
+    }
+    
+    if (charset::unicode_valid_in_identifier(
+      static_cast<unsigned int>(c32)))
+    {
+      lex_identifier();
+      continue;
+    }
+    else if (std::isdigit(static_cast<std::uint8_t>(**current)))
+    {
+      lex_number();
+      continue;
+    }
+    else if (eos() or eof())
+    {
+      return;
+    }
+
+    *current += rc;
   }
 
-  if (error_flag)
-    throw std::runtime_error(lexical_errors.str());
-  return lexemes;
+  if (not(m_errors.str().empty()))
+  {
+    flush_errors();
+  }
+  else
+  {
+    stringify_token_buffer();
+  }
 }
 
-
-/* Generates a string based on the sequence of tokens generated by the lexer.  The
-   string can be formatted in one line (but verbose), which can be used when
-   logging into a file; or it can be formatted in multiple lines using the
-   `strformat' enum.  */
-void lexer::stringify_tokens(std::string &str,
-                  const tokens_squence_t &tokens,
-                  const strformat strformat) noexcept
+/* Generates a string based on the sequence of tokens generated by the lexer.  */
+void lexer::stringify_token_buffer() const noexcept
 {
-    std::ostringstream os { };
-    bool multiline { strformat == strformat::MULTILINE };
-    std::string end { multiline ? "\n" : " " };
-    std::string indent { multiline ? "  " : "" };
-    std::size_t ntokens { tokens.size() };
-    std::size_t i { 1 };
+  auto buf = m_book->m_current_buffer;
 
-    os << "[" << end;
-    
-    for (const auto& token : tokens)
+  if (nullptr not_eq buf)
+  {
+    std::puts(" [");
+    auto token = DEREFER(buf->base);
+    while (token not_eq m_book->m_next)
     {
-      os << indent << "{ `" << token.first << "', ";
-      std::string laststr { i == ntokens ? " }" : " }," };
-
-      switch(token.second)
-      {
-        case token_name::lxmn_number:
-          os << "numeric value" << laststr << end;
-          break;
-
-        case token_name::lxmn_identifier:
-          os << "identifier" << laststr << end;
-          break;
-
-        case token_name::lxmn_operator:
-          os << "arithmetic operator" << laststr << end;
-          break;
-
-        case token_name::lxmn_assignment:
-          os << "assignment operator" << laststr << end;
-          break;
-
-        case token_name::lxmn_opening_parenthesis:
-          os << "opening parenthesis" << laststr << end;
-          break;
-
-        case token_name::lxmn_closing_parenthesis:
-          os << "closing parenthesis" << laststr << end;
-          break;
-
-        case token_name::lxmn_separator:
-          os << "separator" << laststr << end;
-          break;
-
-        case token_name::lxmn_keywork:
-          os << "keyword" << laststr << end;
-          break;
-
-        case token_name::lxmn_string:
-          os << "string" << laststr << end;
-          break;
-      }
-      ++i;
+      std::printf("  { \"%s\", %s },\n", token->value.data(),
+        token_spellings[token->type].name );
+      ++token;
     }
-    os << "]";
-    str = std::move(os.str());
+    std::puts("]");
+  }
 }
+
 }
