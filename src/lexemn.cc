@@ -36,6 +36,7 @@
 #include <cctype>
 
 #include <regex>
+#include <memory>
 
 #include "lexemn/internal.h"
 #include "lexemn/utility.h"
@@ -82,7 +83,8 @@ static const option long_options[] =
 };
 
 /* Displays verbose welcoming.  */
-static void emit_welcome()
+static auto emit_welcome() noexcept
+  -> void
 {
   if (x.color)
   {
@@ -121,7 +123,8 @@ Invoke `help()' for further information; and `quit()' or `q()' to exit.\n\
 }
 
 /* Displays usage guide.  */
-static void usage(std::int32_t status)
+static auto usage(std::int32_t status) noexcept
+  -> void
 {
   if (EXIT_SUCCESS ^ status)
   {
@@ -157,7 +160,8 @@ expressions, plotting functions and solving equations.\n\
 }
 
 /* Displays current version.  */
-static void emit_version()
+static auto emit_version() noexcept
+  -> void
 {
   std::fprintf(stdout, "\
 %s %s Copyright (C) 2022 by Jeremy Fonseca <fonseca.dev@outlook.com>\n",
@@ -165,7 +169,9 @@ static void emit_version()
   std::exit(EXIT_SUCCESS);
 }
 
+[[maybe_unused]]
 static const auto line_buffer_deleter = [](char *const buffer)
+  -> void
 {
   std::free(buffer);
 };
@@ -175,7 +181,8 @@ static auto book = std::make_unique<lexemn::internal::lexemn_book>();
 static lexemn::internal::lexer lexer(std::move(book));
 
 /* Singnal handler.  */
-[[noreturn]] static void signal_handler(const std::int32_t signum) noexcept
+[[noreturn]] static auto signal_handler(const std::int32_t signum) noexcept
+  -> void
 {
   switch (signum)
   {
@@ -191,7 +198,7 @@ static lexemn::internal::lexer lexer(std::move(book));
   std::exit(EXIT_SUCCESS);
 }
 
-std::int32_t main(std::int32_t argc, char **argv)
+auto main(std::int32_t argc, char **argv) -> std::int32_t
 {
   std::setlocale(LC_ALL, "");
 

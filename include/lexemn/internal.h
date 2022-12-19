@@ -281,7 +281,7 @@ struct lexemn_token
    `--interactive' is set, then each typed expression is treated as a single
    page and are pushed onto a stack  (this behaviour also aplies when interpreting
    several Lexemn files)  in the `class book' data structure.  */
-struct lexemn_page
+struct lexemn_page final
 {
   using pointer = std::unique_ptr<lexemn_page>;
 
@@ -310,7 +310,7 @@ struct lexemn_page
 };
 
 /* Abstracts a buffer of tokens allocated for each line.  */
-struct tokens_buffer
+struct tokens_buffer final
 {
   using pointer = std::unique_ptr<tokens_buffer>;
 
@@ -330,7 +330,7 @@ struct tokens_buffer
 /* Arranges a sequence of page buffers in an stack.  Each page node is either an
    abstraction of logical lxm file or a single line expression when Lexemn is
    running in `--interactive' mode. */
-class lexemn_book
+class lexemn_book final
 {
 private:
   friend class lexer;
@@ -359,17 +359,21 @@ public:
 
   lexemn_book() noexcept;
 
-  std::uint32_t push_page_from_stream(const characters_stream chstream) noexcept;
+  auto push_page_from_stream(const characters_stream chstream) noexcept
+    -> std::uint32_t;
 
-  void init_token_buffer(tokens_buffer *buff, std::uint32_t count) noexcept;
+  auto init_token_buffer(tokens_buffer *buff, std::uint32_t count) noexcept
+    -> void;
 
-  tokens_buffer *next_tokens_buffer(tokens_buffer *buff, std::uint32_t count) noexcept;
+  auto next_tokens_buffer(tokens_buffer *buff, std::uint32_t count) noexcept
+    -> tokens_buffer *;
 
   /* Traverse the pages stack in reverse order.  */
-  void traverse_reverse(lexemn_page *head,
+  auto traverse_reverse(lexemn_page *head,
         std::function<void(lexemn_page *,
             std::initializer_list<std::any>)> callback,
                 std::initializer_list<std::any> rest = { }) const noexcept
+    -> void
   {
     if (head == nullptr)
     {
@@ -421,7 +425,7 @@ private:
    For the sentence "6 := f(x)", the lexer will not generate any error because
    it has no concept of the appropriate arrangement of the tokens. It is the
    parser's job to catch errors.  */
-class lexer
+class lexer final
 {
 public:
   lexer() = default;
@@ -442,11 +446,14 @@ public:
 
   ~lexer() noexcept;
 
-  void set_book(lexemn_book::pointer pbook) noexcept;
+  auto set_book(lexemn_book::pointer pbook) noexcept
+    -> void;
   
-  const lexemn_book::pointer &get_book() const noexcept;
+  auto get_book() const noexcept
+    -> const lexemn_book::pointer &;
 
-  void lex() noexcept;
+  auto lex() noexcept
+    -> void;
 
 private:
   enum struct error_type : std::uint8_t
@@ -455,35 +462,50 @@ private:
     stray_symbol,
   };
 
-  void push_token(lexemn_token::pointer token) noexcept;
+  auto push_token(lexemn_token::pointer token) noexcept
+    -> void;
 
-  const lexemn_token::pointer lex_token() noexcept;
+  auto lex_token() noexcept
+    -> const lexemn_token::pointer;
 
-  lexemn_token::pointer allocate_token(const token_type type) const noexcept;
+  auto allocate_token(const token_type type) const noexcept
+    -> lexemn_token::pointer;
 
-  void spell_token() const noexcept;
+  auto spell_token() const noexcept
+    -> void;
 
-  void lex_number() noexcept;
+  auto lex_number() noexcept
+    -> void;
 
-  void lex_identifier() noexcept;
+  auto lex_identifier() noexcept
+    -> void;
 
-  void lex_arithmetic_operator() noexcept;
+  auto lex_arithmetic_operator() noexcept
+    -> void;
 
-  void skip_blank() noexcept;
+  auto skip_blank() noexcept
+    -> void;
 
-  void enqueue_error() noexcept;
+  auto enqueue_error() noexcept
+    -> void;
 
-  bool inline eol() const noexcept;
+  [[nodiscard]] auto inline eol() const noexcept
+    -> bool;
 
-  bool inline eos() const noexcept;
+  [[nodiscard]] auto inline eos() const noexcept
+    -> bool;
 
-  bool inline eof() const noexcept;
+  [[nodiscard]] auto inline eof() const noexcept
+    -> bool;
 
-  bool inline blank() const noexcept;
+  [[nodiscard]] auto inline blank() const noexcept
+    -> bool;
 
-  bool flush_errors();
+  [[nodiscard]] auto flush_errors()
+    -> bool;
 
-  void stringify_token_buffer() const noexcept;
+  auto stringify_token_buffer() const noexcept
+    -> void;
 
 private:
   /* Pointer to a `class book'.  When a new page is pushed onto the current

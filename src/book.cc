@@ -54,7 +54,9 @@ lexemn_book::lexemn_book() noexcept
 }
 
 /* Initializes a token buffer.  */
-void lexemn_book::init_token_buffer(tokens_buffer *buff, std::uint32_t count) noexcept
+auto lexemn_book::init_token_buffer(tokens_buffer *buff,
+  std::uint32_t count) noexcept
+  -> void
 {
   buff->base = std::make_unique<lexemn_token[]>(count);
   buff->limit = DEREFER(buff->base) + count;
@@ -62,8 +64,9 @@ void lexemn_book::init_token_buffer(tokens_buffer *buff, std::uint32_t count) no
 }
 
 /* Allocates the next buffer of tokens.  */
-tokens_buffer *lexemn_book::next_tokens_buffer(tokens_buffer *buff,
+auto lexemn_book::next_tokens_buffer(tokens_buffer *buff,
   std::uint32_t count) noexcept
+  -> tokens_buffer *
 {
   if (buff->next == nullptr)
   {
@@ -78,7 +81,8 @@ tokens_buffer *lexemn_book::next_tokens_buffer(tokens_buffer *buff,
 /* Allocates a new page buffer based on the given stream of charactrs.  Then
    insertes the buffer onto the top of the pages stack of the current book, and
    laters increments pages count in one unit.  Returns the pages count.  */
-std::uint32_t lexemn_book::push_page_from_stream(const characters_stream chstream) noexcept
+auto lexemn_book::push_page_from_stream(const characters_stream chstream) noexcept
+  -> std::uint32_t
 {
   if (m_head == nullptr)
   {
