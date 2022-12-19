@@ -27,95 +27,22 @@ have compatibility with Unicode.
 
 ## Function Definitions
 
-<code><pre>00|
-01|  {{* Makes a weird computation.  *}}
-02|  F (x, y, z) := (x * sin (π * x + 1) - 2 * x) + \
-                                    (x^2 * cos (π * y - 1)) - \
-                                                 tan (sqrt (π * z))!;
-03|</pre></code>
+![Function definitions](./assets/Screenshot%20from%202022-12-19%2011-50-35.png)
 
 The code snippet above is a shorthand version for the following code:
 
-<code><pre>00|
-01| {{* Makes a weird computation.  *}}
-02| F (x : Number, y : Number, z : Number) -> Number :=
-03| {
-04|   return ((x * sin (π * x + 1) - 2 * x) + \
-                                    (x^2 * cos (π * y - 1)) - \
-                                                 tan (sqrt (π * z))!);
-05| };
-06|</pre></code>
+![Function definitions](./assets/Screenshot%20from%202022-12-19%2011-52-40.png)
 
 ## Variable Definitions
 
-<code><pre>00|  {{* do-something.lxmn *}}
-01|
-02|  Using Matrix; {{* For matrix manipulation.  *}}
-03|
-04|  {{* Does something.  *}}
-05|  DoSomething () -> Nothing :=
-06|  {
-07|
-08|  {{* Declaring 'm' as a number and defining 'k' as
-09|         a matrix.  *}}
-10|
-11|    var m : Matrix;
-12|    var k : Number := 10;
-13|
-14|    m.AddRow([ F (-1, k, 5), 2, k.Negate () ]);
-15|    m.AddRow([ k - 1, k + 2, F (1, 2, 3) ]);
-16|
-17|    m.Transpose();
-18|  };
-19|</pre></code>
+![Variable definitions](./assets/Screenshot%20from%202022-12-19%2012-00-27.png)
 
-<code><pre>00|  {{* do-nothing.lxmn *}}
-01|
-02|  Using Plotter; {{* For plotting functions.  *}}
-03|
-04|  {{* Does nothing.  *}}
-05|  DoNothing () -> Nothing :=
-06|  {
-07|    {{* Declaring 'p' as a plotter object and defining
-08|        't' as a string.  *}}
-09|
-10|    var p : Plotter;
-11|    var t : String := "Output";
-12|
-13|    {{* Defining a scoped function.  *}}
-14|
-15|    F (x : Number) := sin (x ^ 2 + 1);
-16|
-17|    p.Title(t);
-18|    p.Format("png");
-19|    p.Domain(0, 100);
-20|
-21|    {{* Plot the scoped function 'f' in the file named
-22|          'Output.png'.  *}}
-23|
-24|    p.Plot(f);
-25|  };
-26|</pre></code>
+![Variable definitions](./assets/Screenshot%20from%202022-12-19%2012-03-29.png)
 
 ## Defining a Class
 
-<code><pre>01|  {{* Possible implemtation for a matrix abstraction.  *}}
-02|  class Matrix
-03|  {
-04|    Transpose () -> Void :=
-05|    {
-06|      {{* ... *}}
-07|      this.TransposeImplementation ();
-08|      {{* ... *}}
-09|    };
-10|  
-11|    {{* Private method.  (Note the '#')  *}}
-12|    # TransposeImplementation () -> Void :=
-13|    {
-14|      {{* ... *}}
-15|    };
-16|  }
-17|</pre></code>
+
+![Defining a class](./assets/Screenshot%20from%202022-12-19%2012-05-40.png)
 
 # Code Structure
 
