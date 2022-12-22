@@ -37,9 +37,11 @@
 namespace lexemn::charset
 {
 
-bool unicode_valid_in_identifier(std::uint32_t ch) noexcept;
+[[nodiscard]] auto unicode_valid_in_identifier(const std::uint32_t ch) noexcept
+  -> bool;
 
-bool unicode_valid_in_number(std::uint32_t ch) noexcept;
+[[nodiscard]] auto unicode_valid_in_number(const std::uint32_t ch) noexcept
+  -> bool;
 
 }
 
