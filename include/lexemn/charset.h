@@ -33,6 +33,10 @@
 #define CHARSET_H
 
 #include <cstdint>
+#include <cuchar>
+#if defined(unix) || defined(__unix__) || defined(__unix)
+#include <cwchar>
+#endif
 
 namespace lexemn::charset
 {
@@ -42,6 +46,9 @@ namespace lexemn::charset
 
 [[nodiscard]] auto unicode_valid_in_number(const std::uint32_t ch) noexcept
   -> bool;
+
+[[nodiscard]] auto offset(const char *str, const std::ptrdiff_t end) noexcept
+  -> std::uint32_t;
 
 }
 

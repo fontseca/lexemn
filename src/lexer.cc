@@ -78,15 +78,13 @@ auto lexer::lex_token() noexcept
 auto lexer::enqueue_error() noexcept
   -> void
 {
-  std::ostringstream err { };
+  std::ostringstream err { "lexemn: \x1B[1;31merror:\x1B[0m unknown symbol detected near ‘",
+    std::ios::app };
   std::ptrdiff_t diff = m_book->m_head->current - m_book->m_head->line;
   auto begin = m_book->m_head->line;
   auto st = m_book->m_head->line;
 
-  err << "lexemn: \x1B[1;31merror:\x1B[0m unknown symbol detected near ‘"
-    << *m_book->m_head->current << "’" << '\n';
-
-  err << "     |  ";
+  err << *m_book->m_head->current << "’\n     |  ";
 
   for (;; ++st)
   {
@@ -107,8 +105,10 @@ auto lexer::enqueue_error() noexcept
     }
   }
 
-  err << '\n' << "     |  " << "\x1B[1;31m"
-    << std::setw(diff + 1) << "^" << "\x1B[0m" << '\n';
+  err << "\n     |  "
+      << std::string(charset::offset(m_book->m_head->line, diff), ' ')
+      << "\x1B[1;31m^\x1B[0m\n";
+
   m_errors << err.str() << '\n';
 }
 
@@ -126,7 +126,7 @@ auto lexer::enqueue_error(const std::uint32_t begin, const std::uint32_t end) no
     {
       break;
     }
-    
+
     if (it == (m_book->m_head->line + begin))
     {
       err << "\x1B[1;31m";
@@ -140,9 +140,10 @@ auto lexer::enqueue_error(const std::uint32_t begin, const std::uint32_t end) no
     }
   }
 
-  err << '\n' << "     |  " << "\x1B[1;31m"
-      << std::setw(begin + 1) << '^'
-      << std::string(end - begin, '~') << "\x1B[0m" << '\n';
+  err << "\n     |  "
+      << std::string(charset::offset(m_book->m_head->line, begin), ' ')
+      << "\x1B[1;31m^"
+      << std::string(end - begin, '~') << "\x1B[0m\n";
 
   m_errors << err.str() << '\n';
 }
@@ -155,6 +156,35 @@ auto lexer::enqueue_error(const std::uint32_t begin, const std::uint32_t end) no
   m_errors.clear();
   m_errors.str(std::string());
   return m_errors.str().empty();
+}
+
+auto lexer::lex_misc_operator() noexcept
+  -> void
+{
+  auto result { allocate_token() };
+
+  switch(*m_book->m_head->current)
+  {
+    case ';':
+    {
+      result->type = token_type::LEXEMN_MISC_OP_SEMICOLON;
+      break;
+    }
+    case ',':
+    {
+      result->type = token_type::LEXEMN_MISC_OP_COMMA;
+      break;
+    }
+    case '?':
+    {
+      result->type = token_type::LEXEMN_MISC_OP_HELP;
+      break;
+    }
+  }
+
+  result->value = { *m_book->m_head->current, '\0' };
+  push_token(std::move(result));
+  ++m_book->m_head->current;
 }
 
 /* Lexes a number to  `token_type::LEXEMN_INTEGER'.  */
@@ -256,7 +286,16 @@ auto lexer::allocate_token(const token_type type) const noexcept
 {
   auto token = std::make_unique<lexemn_token>();
   token->type = type;
+  token->value = "";
+  token->position = 0;
   return token;
+}
+
+/* Allocates room for a new token with a default type and content.  */
+auto lexer::allocate_token() const noexcept
+  -> lexemn_token::pointer
+{
+  return allocate_token(token_type::LEXEMN_CONST_PI);
 }
 
 /* Adds a token to the current buffer of tokens.  */
@@ -471,6 +510,12 @@ auto lexer::lex() noexcept
         break;
       }
 
+      case ',': case ';': case '?':
+      {
+        lex_misc_operator();
+        continue;
+      }
+
    /* case '+': case '-': case '*':
       case '⋅': case '/': case '÷':
       case '^': case '%': case '‰':
@@ -495,6 +540,10 @@ auto lexer::lex() noexcept
     else if (eos() or eof())
     {
       return;
+    }
+    else
+    {
+      enqueue_error();
     }
 
     *current += rc;

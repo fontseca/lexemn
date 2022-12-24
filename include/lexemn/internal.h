@@ -492,6 +492,9 @@ private:
   auto lex_token() noexcept
     -> const lexemn_token::pointer;
 
+  auto allocate_token() const noexcept
+    -> lexemn_token::pointer;
+
   auto allocate_token(const token_type type) const noexcept
     -> lexemn_token::pointer;
 
@@ -505,6 +508,9 @@ private:
     -> void;
 
   auto lex_arithmetic_operator() noexcept
+    -> void;
+
+  auto lex_misc_operator() noexcept
     -> void;
 
   auto skip_blank() noexcept
