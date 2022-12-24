@@ -112,6 +112,41 @@ auto lexer::enqueue_error() noexcept
   m_errors << err.str() << '\n';
 }
 
+/* Adds a new error to the errors stream.  The error that was in the current line
+   must be in the range [begin, end].  */
+auto lexer::enqueue_error(const std::uint32_t begin, const std::uint32_t end) noexcept
+  -> void
+{
+  std::ostringstream err { "lexemn: \x1B[1;31merror:\x1B[0m too many decimal points in number\n     |  ",
+    std::ios::app };
+
+  for (auto it = m_book->m_head->line; ; ++it)
+  {
+    if (*it == '\n' || *it == EOF || *it == '\0')
+    {
+      break;
+    }
+    
+    if (it == (m_book->m_head->line + begin))
+    {
+      err << "\x1B[1;31m";
+    }
+
+    err << *it;
+
+    if (it == (m_book->m_head->line + end))
+    {
+      err << "\x1B[0m";
+    }
+  }
+
+  err << '\n' << "     |  " << "\x1B[1;31m"
+      << std::setw(begin + 1) << '^'
+      << std::string(end - begin, '~') << "\x1B[0m" << '\n';
+
+  m_errors << err.str() << '\n';
+}
+
 /* Flushes errors to stderr.  */
 [[nodiscard]] auto lexer::flush_errors()
   -> bool
@@ -128,6 +163,9 @@ auto lexer::lex_number() noexcept
 {
   auto result { allocate_token(token_type::LEXEMN_NUMBER) };
   auto current = &m_book->m_head->current;
+  std::uint32_t decimal_points { 0 };
+  const std::ptrdiff_t number_begins_at = m_book->m_head->current - m_book->m_head->line;
+  std::ptrdiff_t number_ends_at;
 
   /* When a number is preceded by `-' or `+'.  Generally this should be
      executed once.  */
@@ -159,7 +197,9 @@ auto lexer::lex_number() noexcept
 
     if (**current == '.')
     {
-      enqueue_error();
+      result->value += **current, ++*current;
+      ++decimal_points;
+      continue;
     }
 
     /* When `e' or `E'.  */
@@ -197,6 +237,14 @@ auto lexer::lex_number() noexcept
     result->value += **current; /* Add either `e' or `E',  */
     result->value += *(*current + 1); /* then add `+', `-' or any of [0-9].  */
     *current += 2;
+  }
+
+  number_ends_at = m_book->m_head->current - m_book->m_head->line - 1;
+
+  if (decimal_points > 1)
+  {
+    enqueue_error(number_begins_at, number_ends_at);
+    return;
   }
 
   push_token(std::move(result));

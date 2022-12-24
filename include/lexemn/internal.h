@@ -513,6 +513,9 @@ private:
   auto enqueue_error() noexcept
     -> void;
 
+  auto enqueue_error(const std::uint32_t begin, const std::uint32_t end) noexcept
+    -> void;
+
   [[nodiscard]] auto inline eol() const noexcept
     -> bool;
 
