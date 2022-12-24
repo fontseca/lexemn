@@ -116,6 +116,14 @@ set_target_properties(
       RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/${OUTDIR}
 )
 
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+  target_compile_definitions(
+    ${PROJECT_NAME}
+      PRIVATE
+      DEBUGGING=1
+  )
+endif()
+
 if (UNIX)
   find_library(
     GNU_READLINE

@@ -126,7 +126,7 @@ auto lexer::enqueue_error() noexcept
 auto lexer::lex_number() noexcept
   -> void
 {
-  auto result { allocate_token(LEXEMN_NUMBER) };
+  auto result { allocate_token(token_type::LEXEMN_NUMBER) };
   auto current = &m_book->m_head->current;
 
   /* When a number is preceded by `-' or `+'.  Generally this should be
@@ -221,31 +221,35 @@ auto lexer::push_token(lexemn_token::pointer token) noexcept
 
     if (m_book->m_current_buffer->limit == m_book->m_next)
     {
-      std::cout << "making reallocation..." << '\n';
-
-      std::ptrdiff_t capacity =
+      std::ptrdiff_t new_base_capacity =
         2 * static_cast<std::ptrdiff_t>(m_book->m_current_buffer->limit
           - DEREFER(m_book->m_current_buffer->base));
 
       /* then allocate twice its previous capacity.  */
 
-      auto base = new lexemn_token[capacity];
+#ifdef DEBUGGING
+        char message[0x64];
+        sprintf(message, "expanding base of tokens buffer; new capacity is %ld", new_base_capacity);
+        log(message);
+#endif
 
-      auto token = DEREFER(m_book->m_current_buffer->base);
+      auto new_base_of_tokens = new lexemn_token[new_base_capacity];
+
+      auto base_token_of_current_buffer = DEREFER(m_book->m_current_buffer->base);
       std::int32_t i { -1 };
 
-      while (token not_eq m_book->m_next)
-        *(base + ++i) = std::move(*token++);
+      while (base_token_of_current_buffer not_eq m_book->m_next)
+        *(new_base_of_tokens + ++i) = std::move(*base_token_of_current_buffer++);
 
       /* (Where the next token will be in the new base.)  */
 
       std::ptrdiff_t current = m_book->m_next
         - DEREFER(m_book->m_current_buffer->base);
 
-      RESET(m_book->m_current_buffer->base, base);
+      RESET(m_book->m_current_buffer->base, new_base_of_tokens);
 
       m_book->m_current_buffer->limit = DEREFER(
-        m_book->m_current_buffer->base) + capacity;
+        m_book->m_current_buffer->base) + new_base_capacity;
       
       m_book->m_next = DEREFER(m_book->m_current_buffer->base) + current;
     }
@@ -259,13 +263,16 @@ auto lexer::push_token(lexemn_token::pointer token) noexcept
 auto lexer::lex_identifier() noexcept
   -> void
 {
-  auto result { allocate_token(LEXEMN_IDENTIFIER) };
+  auto result { allocate_token(token_type::LEXEMN_IDENTIFIER) };
   char32_t c32 { };
-  while (std::mbrtoc32(&c32, m_book->m_head->current,
-    m_book->m_head->len, nullptr))
+
+  while (std::mbrtoc32(&c32, m_book->m_head->current, m_book->m_head->len, nullptr))
   {
-    if (!charset::unicode_valid_in_identifier(c32))
+    if (not charset::unicode_valid_in_identifier(c32))
+    {
       break;
+    }
+
     result->value += *m_book->m_head->current;
     ++m_book->m_head->current;
   }
@@ -273,13 +280,14 @@ auto lexer::lex_identifier() noexcept
   push_token(std::move(result));
 }
 
-/* Skip blanks.  */
+/* Skips any blank character.  */
 auto lexer::skip_blank() noexcept
   -> void
 {
-  do
+  while(blank())
+  {
     ++m_book->m_head->current;
-  while(blank());
+  }
 }
 
 /* Checks if the current character is EOL.  */
@@ -307,10 +315,7 @@ auto lexer::skip_blank() noexcept
 [[nodiscard]] auto inline lexer::blank() const noexcept
   -> bool
 {
-  return std::isspace(
-    static_cast<std::uint8_t>(*m_book->m_head->current))
-      or std::isblank(
-        static_cast<std::uint8_t>(*m_book->m_head->current));
+  return std::isblank(static_cast<std::uint8_t>(*m_book->m_head->current));
 }
 
 /* Converts a raw string expression with the Lexemn grammar into a sequence of
@@ -320,12 +325,12 @@ auto lexer::lex() noexcept
   -> void
 {
   /* Current character in the source stream.  */
-  characters_stream *current = &m_book->m_head->current;
+  characters_stream *current = std::addressof(m_book->m_head->current);
   std::size_t rc;
   char32_t c32;
+  bool next_line_needs_buffer { true };
 
-  while ((rc = std::mbrtoc32(&c32, *current,
-    m_book->m_head->len, nullptr)))
+  while ((rc = std::mbrtoc32(&c32, *current, m_book->m_head->len, nullptr)))
   {
     if (blank())
     {
@@ -337,25 +342,40 @@ auto lexer::lex() noexcept
     {
       ++*current;
       m_book->m_head->line = *current;
+      next_line_needs_buffer = true;
+      continue;
+    }
 
-      /* As soon as the current caracter is not one of these...  */
+    if (not blank() and not eol() and not eof()
+      and not eos() and next_line_needs_buffer)
+    {
+      /* Allocate the first buffer of tokens.  */
 
-      if (not eos()
-        and not eol()
-          and not eof())
+      if (m_book->m_current_buffer == nullptr)
       {
-        /* allocate a new buffer for the next line  */
+        m_book->m_base_buffer = std::make_unique<tokens_buffer>();
+        m_book->init_token_buffer(DEREFER(m_book->m_base_buffer), TOKENS_BUFFER_SIZE);
+        m_book->m_current_buffer = DEREFER(m_book->m_base_buffer);
+        m_book->m_next = DEREFER(m_book->m_base_buffer->base);
+#ifdef DEBUGGING
+        log("making first buffer of tokens");
+#endif
+      }
+      else
+      {
+        /* Allocate a new buffer for the next line,  */
 
-        std::cout << "making a new buffer...\n";
+#ifdef DEBUGGING
+        log("making new buffer of tokens");
+#endif
         m_book->m_current_buffer = m_book->next_tokens_buffer(
           m_book->m_current_buffer, TOKENS_BUFFER_SIZE);
-        
+
         /* and then point to the new buffer.  */
         m_book->m_next = DEREFER(m_book->m_current_buffer->base);
-        std::cout << "made." << '\n';
       }
 
-      continue;
+      next_line_needs_buffer = false;
     }
 
     switch(**current)
@@ -412,7 +432,7 @@ auto lexer::lex() noexcept
         break;
       } */
     }
-    
+
     if (charset::unicode_valid_in_identifier(
       static_cast<unsigned int>(c32)))
     {
@@ -436,30 +456,42 @@ auto lexer::lex() noexcept
   {
     (void) flush_errors();
   }
+#ifdef DEBUGGING
   else
   {
     stringify_token_buffer();
   }
+#endif
 }
 
 /* Generates a string based on the sequence of tokens generated by the lexer.  */
 auto lexer::stringify_token_buffer() const noexcept
   -> void
 {
-  auto buf = m_book->m_current_buffer;
+  const auto current_buffer = m_book->m_current_buffer;
 
-  if (nullptr not_eq buf)
+  if (nullptr not_eq current_buffer)
   {
-    std::puts(" [");
-    auto token = DEREFER(buf->base);
+    auto token = DEREFER(current_buffer->base);
+
+    std::puts("\n[");
+
     while (token not_eq m_book->m_next)
     {
-      std::printf("  { \"%s\", %s },\n", token->value.data(),
-        token_spellings[token->type].name );
+      std::printf("  { `%s', %s },\n", token->value.data(),
+        token_spellings[static_cast<std::uint32_t>(token->type)].name.c_str() );
       ++token;
     }
-    std::puts("]");
+
+    std::puts("]\n");
   }
+}
+
+/* Logs `message' to stdout.  */
+auto inline lexer::log(const std::string_view message) const noexcept
+  -> void
+{
+  std::fprintf(stdout, "lexemn: \x1B[1;71mdebugging:\x1B[0m %s\n", message.data());
 }
 
 }

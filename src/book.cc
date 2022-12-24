@@ -41,17 +41,15 @@ namespace lexemn::internal
 
 /* Constructs a Lexemn book.  */
 lexemn_book::lexemn_book() noexcept
-  : m_head { nullptr }
+  : m_next { nullptr }
+  , m_current_buffer { nullptr }
+  , m_base_buffer { nullptr }
+  , m_head { nullptr }
   , m_pages_count { 0 }
   , m_symbol_table { nullptr }
   , m_date { "" }
   , m_time { "" }
-{
-  m_base_buffer = std::make_unique<tokens_buffer>();
-  init_token_buffer(DEREFER(m_base_buffer), TOKENS_BUFFER_SIZE);
-  m_current_buffer = DEREFER(m_base_buffer);
-  m_next = DEREFER(m_base_buffer->base);
-}
+{ }
 
 /* Initializes a token buffer.  */
 auto lexemn_book::init_token_buffer(tokens_buffer *buff,

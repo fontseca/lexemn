@@ -50,6 +50,9 @@
 #define C_PROMPT(P) C_BEGIN P C_END   /* Colored prompt.  */
 #define UNC_PROMPT(P) P " "           /* Uncolored prompt.  */
 
+/* The default size of the input to read.  */
+#define DEFAULT_INPUT_SIZE 1024
+
 /* Abstracts the way Lexemn runs.  */
 static struct running_mode
 {
@@ -263,17 +266,17 @@ auto main(std::int32_t argc, char **argv) -> std::int32_t
 
     if (x.no_readline)
     {
-      RESET(line_buffer, static_cast<char *>(malloc(sizeof(char[256]))));
+      RESET(line_buffer, static_cast<char *>(malloc(sizeof(char[DEFAULT_INPUT_SIZE]))));
       char ch;
 
       for (;;)
       {
         std::clearerr(stdin);
-        std::memset(DEREFER(line_buffer), '\0', 256);
-        
+        std::memset(DEREFER(line_buffer), '\0', DEFAULT_INPUT_SIZE);
+
         while (ch = fgetc(stdin), ch != -1)
         {
-          char s[2] = { ch, '\0'};
+          const char s[2] = { ch, '\0'};
           std::strcat(DEREFER(line_buffer), s);
         }
 

@@ -38,6 +38,7 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <sstream>
 #include <vector>
 #include <functional>
@@ -182,7 +183,7 @@
 #define MISC_OP(name, symbol) LEXEMN_MISC_OP_ ## name,
 
 /* Defines the default size of the buffer of tokens.  */
-#define TOKENS_BUFFER_SIZE 64
+#define TOKENS_BUFFER_SIZE 0x64
 
 namespace lexemn::internal
 {
@@ -199,7 +200,7 @@ typedef std::ostringstream errors_stream;
 class lexemn_book;
 
 /* The type of any lexemn token.  */
-enum token_type
+enum struct token_type
 {
   TOKEN_TYPES_TABLE
   LEXEMN_IDENTIFIER,
@@ -217,6 +218,29 @@ enum token_type
 #undef LOGIC_OP
 #undef REL_OP
 #undef MISC_OP
+
+struct token_spelling final
+{
+  std::string name;
+  std::string symbol;
+};
+
+#define CONSTANT(name, symbol) { "LEXEMN_CONST_" #name, symbol },
+#define ARITH_OP(name, symbol) { "LEXEMN_ARITH_OP_" #name, symbol },
+#define ALG_OP(name, symbol) { "LEXEMN_ALGEBRAIC_OP_" #name, symbol },
+#define LIN_ALG_OP(name, symbol) { "LEXEMN_LIN_ALGEBRAIC_OP_" #name, symbol },
+#define SET_OP(name, symbol) { "LEXEMN_SET_OP_" #name, symbol },
+#define BITW_OP(name, symbol) { "LEXEMN_BITW_OP_" #name, symbol },
+#define LOGIC_OP(name, symbol) { "LEXEMN_LOGIC_OP_" #name, symbol },
+#define REL_OP(name, symbol) { "LEXEMN_REL_OP_" #name, symbol },
+#define MISC_OP(name, symbol) { "LEXEMN_MISC_OP_" #name, symbol },
+
+static const struct token_spelling token_spellings[static_cast<std::uint32_t>(token_type::N_TOKEN_TYPES)] =
+{
+  TOKEN_TYPES_TABLE
+  { "LEXEMN_IDENTIFIER", "" },
+  { "LEXEMN_NUMBER", "" }
+};
 
 /* Entry node for a hash table.  */
 struct hash_table_node
@@ -505,6 +529,9 @@ private:
     -> bool;
 
   auto stringify_token_buffer() const noexcept
+    -> void;
+
+  auto inline log(const std::string_view message) const noexcept
     -> void;
 
 private:
