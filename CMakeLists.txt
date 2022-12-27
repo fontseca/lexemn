@@ -108,6 +108,7 @@ target_sources(
       ${SRCDIR}/lexer.cc
       ${SRCDIR}/utility.cc
       ${SRCDIR}/lexemn.cc
+      ${SRCDIR}/error.cc
 )
 
 set_target_properties(

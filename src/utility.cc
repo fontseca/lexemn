@@ -1,5 +1,5 @@
 /*
- * utilities.cc --
+ * utility.cc --
  *  ___       _______      ___    ___ _______   _____ ______   ________
  * |\  \     |\  ___ \    |\  \  /  /|\  ___ \ |\   _ \  _   \|\   ___  \
  * \ \  \    \ \   __/|   \ \  \/  / | \   __/|\ \  \\\__\ \  \ \  \\ \  \
@@ -29,21 +29,35 @@
  * Lexemn. If not, see <https://www.gnu.org/licenses/>.
  **/
 
-#include "lexemn/internal.h"
+#include <cstring>
+
 #include "lexemn/utility.h"
+#include "lexemn/error.h"
 
 namespace lexemn::utility
 {
 
-internal::characters_stream duplicate_stream(
-  internal::characters_stream src,
-    std::size_t n) noexcept
+auto duplicate_stream(internal::characters_stream src, std::size_t n) noexcept
+  -> decltype(src)
 {
   internal::characters_stream dest = new char[n];
-  return dest == nullptr
-    ? nullptr
-      : static_cast<internal::characters_stream>(
-        std::memcpy(dest, src, n));
+  return dest == nullptr ? nullptr : static_cast<internal::characters_stream>(std::memcpy(dest, src, n));
+}
+
+auto make_error_message(std::string &error_message, const error::error_type error_type) noexcept
+  -> void
+{
+  char buffer[0x400];
+  std::sprintf(buffer, "lexemn: \x1B[1;31merror:\x1B[0m %s\n", error::errors_dictionary[error_type]);
+  error_message = std::move(buffer);
+}
+
+auto make_error_message(std::string &error_message, const char *const custom_message) noexcept
+  -> void
+{
+  char buffer[0x400];
+  std::sprintf(buffer, "lexemn: \x1B[1;31merror:\x1B[0m %s\n", custom_message);
+  error_message = std::move(buffer);
 }
 
 }

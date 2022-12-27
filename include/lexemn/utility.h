@@ -1,5 +1,5 @@
 /*
- * utility.h -- utility objects for lexemn
+ * utility.h -- utility functions for lexemn
  *  ___       _______      ___    ___ _______   _____ ______   ________
  * |\  \     |\  ___ \    |\  \  /  /|\  ___ \ |\   _ \  _   \|\   ___  \
  * \ \  \    \ \   __/|   \ \  \/  / | \   __/|\ \  \\\__\ \  \ \  \\ \  \
@@ -32,16 +32,30 @@
 #ifndef UTILITY_H
 #define UTILITY_H
 
-#include <regex>
+#include <string>
 
-#include "lexemn/internal.h"
+namespace lexemn::error
+{
+  enum struct error_type;
+}
+
+namespace lexemn::internal
+{
+  typedef char *characters_stream;
+}
 
 namespace lexemn::utility
 {
 
-internal::characters_stream duplicate_stream(
-  internal::characters_stream src,
-    std::size_t n) noexcept;
+auto duplicate_stream(internal::characters_stream src, std::size_t n) noexcept
+  -> decltype(src);
+
+auto make_error_message(std::string &error_message, const error::error_type error_type) noexcept
+  -> void;
+
+auto make_error_message(std::string &error_message, const char *const custom_message) noexcept
+  -> void;
+
 }
 
 #endif /* UTILITY_H */

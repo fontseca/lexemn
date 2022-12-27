@@ -37,13 +37,19 @@
 #include <string_view>
 #include <iomanip>
 #include <string>
+#include <cstdarg>
+#include <chrono>
 
 #include "lexemn/internal.h"
 #include "lexemn/utility.h"
 #include "lexemn/charset.h"
+#include "lexemn/error.h"
 
 namespace lexemn::internal
 {
+
+/* The number of vertibal bars `|' in an line.  */
+static std::uint32_t vertical_bars { 0 };
 
 lexer::lexer(lexemn_book::pointer &&pbook) noexcept
   : m_book { std::move(pbook) }
@@ -75,77 +81,140 @@ auto lexer::lex_token() noexcept
 }
 
 /* Adds a new error to the errors stream.  */
-auto lexer::enqueue_error() noexcept
+auto lexer::enqueue_error(const error::error_type error_type) noexcept
   -> void
 {
-  std::ostringstream err { "lexemn: \x1B[1;31merror:\x1B[0m unknown symbol detected near ‘",
-    std::ios::app };
-  std::ptrdiff_t diff = m_book->m_head->current - m_book->m_head->line;
-  auto begin = m_book->m_head->line;
-  auto st = m_book->m_head->line;
+  std::ostringstream error { };
+  char error_header_buffer[0x400];
+  std::string error_type_message;
+  std::ptrdiff_t offset = m_book->m_head->current - m_book->m_head->line;
+  auto iterator = m_book->m_head->line;
 
-  err << *m_book->m_head->current << "’\n     |  ";
+  utility::make_error_message(error_type_message, error_type);
 
-  for (;; ++st)
+  const char current_as_string[2] = { *m_book->m_head->current, '\0' };
+
+  std::sprintf(error_header_buffer, error_type_message.c_str(), current_as_string);
+
+  error << std::move(error_header_buffer)
+        << "     |  ";
+
+  for (;; ++iterator)
   {
-    if (*begin == '\n' || *begin == EOF || *begin == '\0')
+    if ('\n'  == *iterator
+      || EOF  == *iterator
+      || '\0' == *iterator)
     {
       break;
     }
-    else if (st == (m_book->m_head->line + diff)) /* color unwanted symbol */
+    else if (m_book->m_head->line + offset == iterator)
     {
-      err << "\x1B[1;31m" << *begin << "\x1B[0m";
-      ++begin;
+      error << "\x1B[1;31m"
+            << *iterator
+            << "\x1B[0m";
       continue;
     }
     else
     {
-      err << *begin;
-      ++begin;
+      error << *iterator;
     }
   }
 
-  err << "\n     |  "
-      << std::string(charset::offset(m_book->m_head->line, diff), ' ')
-      << "\x1B[1;31m^\x1B[0m\n";
+  error << "\n     |  "
+        << std::string(charset::offset(m_book->m_head->line, offset), ' ')
+        << "\x1B[1;31m^\x1B[0m\n";
 
-  m_errors << err.str() << '\n';
+  m_errors << error.str() << '\n';
 }
 
 /* Adds a new error to the errors stream.  The error that was in the current line
    must be in the range [begin, end].  */
-auto lexer::enqueue_error(const std::uint32_t begin, const std::uint32_t end) noexcept
+auto lexer::enqueue_error(const error::error_type error_type,
+  const std::uint32_t begin, const std::uint32_t end) noexcept
   -> void
 {
-  std::ostringstream err { "lexemn: \x1B[1;31merror:\x1B[0m too many decimal points in number\n     |  ",
-    std::ios::app };
+  std::ostringstream error { };
+  char error_header_buffer[0x400];
+  auto iterator = m_book->m_head->line;
+  std::string error_type_message;
 
-  for (auto it = m_book->m_head->line; ; ++it)
+  utility::make_error_message(error_type_message, error_type);
+  std::sprintf(error_header_buffer, error_type_message.c_str(), m_book->m_head->current);
+
+  error << std::move(error_header_buffer)
+        << "     |  ";
+
+  for (;; ++iterator)
   {
-    if (*it == '\n' || *it == EOF || *it == '\0')
+    if ('\n'  == *iterator
+      || EOF  == *iterator
+      || '\0' == *iterator)
     {
       break;
     }
 
-    if (it == (m_book->m_head->line + begin))
+    if (iterator == (m_book->m_head->line + begin))
     {
-      err << "\x1B[1;31m";
+      error << "\x1B[1;31m";
     }
 
-    err << *it;
+    error << *iterator;
 
-    if (it == (m_book->m_head->line + end))
+    if (iterator == (m_book->m_head->line + end))
     {
-      err << "\x1B[0m";
+      error << "\x1B[0m";
     }
   }
 
-  err << "\n     |  "
-      << std::string(charset::offset(m_book->m_head->line, begin), ' ')
-      << "\x1B[1;31m^"
-      << std::string(end - begin, '~') << "\x1B[0m\n";
+  error << "\n     |  "
+        << std::string(charset::offset(m_book->m_head->line, begin), ' ')
+        << "\x1B[1;31m^"
+        << std::string(end - begin, '~') << "\x1B[0m\n";
 
-  m_errors << err.str() << '\n';
+  m_errors << error.str() << '\n';
+}
+
+/* Enqueues a new error at the given position `at' with a custom format message in
+   `format'. */
+auto lexer::enqueue_error(const std::uint32_t at, const char *const format, ...) noexcept
+  -> void
+{
+  char formatted_buffer[0x300];
+  auto iterator = m_book->m_head->line;
+  std::ostringstream erroneous_sentence { };
+  std::va_list arguments;
+  std::string error_type_message;
+
+  va_start(arguments, format);
+
+  std::vsprintf(formatted_buffer, format, arguments);
+  utility::make_error_message(error_type_message, formatted_buffer);
+
+  for(;; ++iterator)
+  {
+    if ('\n' == *iterator
+      || EOF == *iterator
+      || '\0' == *iterator)
+    {
+      break;
+    }
+
+    if (m_book->m_head->line + at == iterator)
+    {
+      erroneous_sentence << "\x1B[1;31m" << *iterator << "\x1B[0m";
+      continue;
+    }
+
+   erroneous_sentence << *iterator;
+  }
+
+  va_end(arguments);
+
+  m_errors << error_type_message
+           << "     |  " << erroneous_sentence.str()
+           << "\n     |  "
+           << std::string(charset::offset(m_book->m_head->line, at), ' ')
+           << "\x1B[1;31m^\x1B[0m\n";
 }
 
 /* Flushes errors to stderr.  */
@@ -158,6 +227,7 @@ auto lexer::enqueue_error(const std::uint32_t begin, const std::uint32_t end) no
   return m_errors.str().empty();
 }
 
+/* Lexes a miscellaneous operator.  */
 auto lexer::lex_misc_operator() noexcept
   -> void
 {
@@ -185,6 +255,172 @@ auto lexer::lex_misc_operator() noexcept
   result->value = { *m_book->m_head->current, '\0' };
   push_token(std::move(result));
   ++m_book->m_head->current;
+}
+
+/* Lexes an algebraic operator.  */
+auto lexer::lex_algebraic_operator() noexcept
+  -> void
+{
+  auto result { allocate_token() };
+
+  if (*m_book->m_head->current == '|')
+  {
+    result->type = ++vertical_bars & 1
+      ? token_type::LEXEMN_ALGEBRAIC_OP_LEFT_ABSOLUTE
+      : token_type::LEXEMN_ALGEBRAIC_OP_RIGHT_ABSOLUTE;
+    result->value = "|";
+    ++m_book->m_head->current;
+    goto do_push;
+  }
+
+  if (*m_book->m_head->current == ':'
+    and *(m_book->m_head->current + 1) == '=')
+  {
+    result->type = token_type::LEXEMN_ALGEBRAIC_OP_DEFINITION;
+    result->value = ":=";
+    m_book->m_head->current += 2;
+    goto do_push;
+  }
+
+  switch(*m_book->m_head->current)
+  {
+    case '(':
+    {
+      result->type = token_type::LEXEMN_ALGEBRAIC_OP_OPEN_PAREN;
+      break;
+    }
+
+    case ')':
+    {
+      result->type = token_type::LEXEMN_ALGEBRAIC_OP_CLOSE_PAREN;
+      break;
+    }
+
+    case '[':
+    {
+      result->type = token_type::LEXEMN_ALGEBRAIC_OP_OPEN_BRACKET;
+      break;
+    }
+
+    case ']':
+    {
+      result->type = token_type::LEXEMN_ALGEBRAIC_OP_CLOSE_BRACKET;
+      break;
+    }
+
+    case '{':
+    {
+      result->type = token_type::LEXEMN_ALGEBRAIC_OP_OPEN_BRACE;
+      break;
+    }
+  }
+
+  result->value = { *m_book->m_head->current, '\0' };
+  ++m_book->m_head->current;
+
+do_push:
+  push_token(std::move(result));
+}
+
+/* Lexes an arithmetic operator.  */
+auto lexer::lex_arithmetic_operator() noexcept
+  -> void
+{
+  auto result { allocate_token() };
+
+  if (*m_book->m_head->current == '+'
+    and *(m_book->m_head->current + 1) == '-')
+  {
+    result->type = token_type::LEXEMN_ARITH_OP_PLUS_MINUS;
+    result->value = "+-";
+    m_book->m_head->current += 2;
+    goto do_push;
+  }
+
+  if (*m_book->m_head->current == '+'
+    and *(m_book->m_head->current + 1) == '+')
+  {
+    result->type = token_type::LEXEMN_ARITH_OP_INCREMENT;
+    result->value = "++";
+    m_book->m_head->current += 2;
+    goto do_push;
+  }
+
+  if (*m_book->m_head->current == '-'
+    and *(m_book->m_head->current + 1) == '+')
+  {
+    result->type = token_type::LEXEMN_ARITH_OP_MINUS_PLUS;
+    result->value = "-+";
+    m_book->m_head->current += 2;
+    goto do_push;
+  }
+
+  if (*m_book->m_head->current == '-'
+    and *(m_book->m_head->current + 1) == '-')
+  {
+    result->type = token_type::LEXEMN_ARITH_OP_DECREMENT;
+    result->value = "--";
+    m_book->m_head->current += 2;
+    goto do_push;
+  }
+
+  switch(*m_book->m_head->current)
+  {
+    case '-':
+    {
+      result->type = token_type::LEXEMN_ARITH_OP_MINUS;
+      break;
+    }
+
+    case '+':
+    {
+      result->type = token_type::LEXEMN_ARITH_OP_PLUS;
+      break;
+    }
+
+    case '*':
+    {
+      result->type = token_type::LEXEMN_ARITH_OP_MULT_ASTERISK;
+      break;
+    }
+
+    case '/':
+    {
+      result->type = token_type::LEXEMN_ARITH_OP_DIV_SLASH;
+      break;
+    }
+
+    case '^':
+    {
+      result->type = token_type::LEXEMN_ARITH_OP_EXPONENTIATION;
+      break;
+    }
+
+    case '%':
+    {
+      result->type = token_type::LEXEMN_ARITH_OP_PERCENT;
+      break;
+    }
+
+    case '!':
+    {
+      result->type = token_type::LEXEMN_ARITH_OP_FACTORIAL;
+      break;
+    }
+
+    /* FIXME: Correct ambiguous case.   */
+    case '.':
+    {
+      result->type = token_type::LEXEMN_ARITH_OP_PERIOD;
+      break;
+    }
+  }
+
+  result->value = { *m_book->m_head->current, '\0' };
+  ++m_book->m_head->current;
+
+do_push:
+  push_token(std::move(result));
 }
 
 /* Lexes a number to  `token_type::LEXEMN_INTEGER'.  */
@@ -273,7 +509,8 @@ auto lexer::lex_number() noexcept
 
   if (decimal_points > 1)
   {
-    enqueue_error(number_begins_at, number_ends_at);
+    enqueue_error(error::error_type::too_many_decimal_points,
+      number_begins_at, number_ends_at);
     return;
   }
 
@@ -413,11 +650,11 @@ auto lexer::lex() noexcept
 {
   /* Current character in the source stream.  */
   characters_stream *current = std::addressof(m_book->m_head->current);
-  std::size_t rc;
-  char32_t c32;
+  std::size_t offset;
+  char32_t code_point;
   bool next_line_needs_buffer { true };
 
-  while ((rc = std::mbrtoc32(&c32, *current, m_book->m_head->len, nullptr)))
+  while ((offset = std::mbrtoc32(&code_point, *current, m_book->m_head->len, nullptr)))
   {
     if (blank())
     {
@@ -425,6 +662,7 @@ auto lexer::lex() noexcept
       continue;
     }
 
+    /* Move cursor to the next line.  */
     if (eol())
     {
       ++*current;
@@ -436,6 +674,8 @@ auto lexer::lex() noexcept
     if (not blank() and not eol() and not eof()
       and not eos() and next_line_needs_buffer)
     {
+      vertical_bars = 0;
+
       /* Allocate the first buffer of tokens.  */
 
       if (m_book->m_current_buffer == nullptr)
@@ -453,7 +693,7 @@ auto lexer::lex() noexcept
         /* Allocate a new buffer for the next line,  */
 
 #ifdef DEBUGGING
-        log("making new buffer of tokens");
+        log("making a new buffer of tokens");
 #endif
         m_book->m_current_buffer = m_book->next_tokens_buffer(
           m_book->m_current_buffer, TOKENS_BUFFER_SIZE);
@@ -463,6 +703,68 @@ auto lexer::lex() noexcept
       }
 
       next_line_needs_buffer = false;
+    }
+
+    /* When an arithmetic operator's code point is universal...  */
+
+    if (code_point == 0x22C5)
+    {
+      auto result { allocate_token(token_type::LEXEMN_ARITH_OP_MULT_DOT) };
+      result->value = "⋅";
+      push_token(std::move(result));
+      *current += std::mblen(*current, MB_CUR_MAX);
+      continue;
+    }
+    else if (code_point == 0x00F7)
+    {
+      auto result { allocate_token(token_type::LEXEMN_ARITH_OP_DIV_OBELUS) };
+      result->value = "÷";
+      push_token(std::move(result));
+      *current +=  std::mblen(*current, MB_CUR_MAX);
+      continue;
+    }
+    else if (code_point == 0x2030)
+    {
+      auto result { allocate_token(token_type::LEXEMN_ARITH_OP_PERMILE) };
+      result->value = "‰";
+      push_token(std::move(result));
+      *current += std::mblen(*current, MB_CUR_MAX);
+      continue;
+    }
+
+    /* When an algebraic operator's code point is universal...   */
+
+    else if (code_point == 0x230A)
+    {
+      auto result { allocate_token(token_type::LEXEMN_ALGEBRAIC_OP_LEFT_FLOOR) };
+      result->value = "⌊";
+      push_token(std::move(result));
+      *current += std::mblen(*current, MB_CUR_MAX);
+      continue;
+    }
+    else if (code_point == 0x230B)
+    {
+      auto result { allocate_token(token_type::LEXEMN_ALGEBRAIC_OP_RIGHT_FLOOR) };
+      result->value = "⌋";
+      push_token(std::move(result));
+      *current +=  std::mblen(*current, MB_CUR_MAX);
+      continue;
+    }
+    else if (code_point == 0x2308)
+    {
+      auto result { allocate_token(token_type::LEXEMN_ALGEBRAIC_OP_LEFT_CEILING) };
+      result->value = "⌈";
+      push_token(std::move(result));
+      *current += std::mblen(*current, MB_CUR_MAX);
+      continue;
+    }
+    else if (code_point == 0x2309)
+    {
+      auto result { allocate_token(token_type::LEXEMN_ALGEBRAIC_OP_RIGHT_CEILING) };
+      result->value = "⌉";
+      push_token(std::move(result));
+      *current += std::mblen(*current, MB_CUR_MAX);
+      continue;
     }
 
     switch(**current)
@@ -477,7 +779,18 @@ auto lexer::lex() noexcept
         break;
       }
 
-      case '+': case '-':
+      case '=':
+      {
+        char current_as_string[2] = { **current, '\0' };
+        enqueue_error(m_book->m_head->current - m_book->m_head->line,
+          error::errors_dictionary[error::error_type::stray_in_program_with_suggestion],
+            current_as_string, ":=");
+        ++*current;
+        continue;
+      }
+
+      case '+':
+      case '-':
       {
         switch (*(*current + 1))
         {
@@ -490,44 +803,85 @@ auto lexer::lex() noexcept
             }
             break;
           }
-          case '0': case '1': case '2': case '3': case '4':
-          case '5': case '6': case '7': case '8': case '9':
+          case '0':
+          case '1':
+          case '2':
+          case '3':
+          case '4':
+          case '5':
+          case '6':
+          case '7':
+          case '8':
+          case '9':
           {
             lex_number();
             continue;
           }
-        } 
+        }
+
         if (charset::unicode_valid_in_number(*(*current + 1)))
         {
           lex_number();
           continue;
         }
-     /* else
+        else
         {
           lex_arithmetic_operator();
           continue;
-        }  */
+        }
+
         break;
       }
 
-      case ',': case ';': case '?':
+      case ',':
+      case ';':
+      case '?':
       {
         lex_misc_operator();
         continue;
       }
 
-   /* case '+': case '-': case '*':
-      case '⋅': case '/': case '÷':
-      case '^': case '%': case '‰':
-      case '.': case '!':
+      case ':':
       {
-        lex_arithmetic_operator();
+        if (*(m_book->m_head->current + 1) == '=')
+        {
+          lex_algebraic_operator();
+          continue;
+        }
+        else
+        {
+          char current_as_string[2] = { **current, '\0' };
+          enqueue_error(m_book->m_head->current - m_book->m_head->line,
+            error::errors_dictionary[error::error_type::stray_in_program_with_suggestion],
+              current_as_string, ":=");
+          ++*current;
+          continue;
+        }
+
         break;
-      } */
+      }
+
+      case '(':
+      case ')':
+      case '[':
+      case ']':
+      case '{':
+      case '}':
+      case '|':
+        lex_algebraic_operator();
+        continue;
+
+      case '*':
+      case '/':
+      case '^':
+      case '%':
+      case '!':
+        lex_arithmetic_operator();
+        continue;
     }
 
     if (charset::unicode_valid_in_identifier(
-      static_cast<unsigned int>(c32)))
+      static_cast<unsigned int>(code_point)))
     {
       lex_identifier();
       continue;
@@ -543,10 +897,10 @@ auto lexer::lex() noexcept
     }
     else
     {
-      enqueue_error();
+      enqueue_error(error::error_type::unknown_symbol_detected);
     }
 
-    *current += rc;
+    *current += offset;
   }
 
   if (not(m_errors.str().empty()))

@@ -29,6 +29,11 @@
  * Lexemn. If not, see <https://www.gnu.org/licenses/>.
  **/
 
+#include <cuchar>
+#if defined(unix) || defined(__unix__) || defined(__unix)
+#include <cwchar>
+#endif
+
 #include "lexemn/charset.h"
 
 namespace lexemn::charset
@@ -58,7 +63,7 @@ namespace lexemn::charset
   }
 
   return (
-    (is_in_range(ch, 0x0041, 0x005A) or is_in_range(ch, 0x0061, 0x0102))
+    (is_in_range(ch, 'A', 'Z') or is_in_range(ch, 'a', 'z'))
 
     or
 

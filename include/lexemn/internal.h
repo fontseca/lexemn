@@ -45,6 +45,8 @@
 #include <initializer_list>
 #include <any>
 
+#include "lexemn/error.h"
+
 #ifndef DEREFER
 /* Gets the address wrapped by a smart pointer.  */
 #define DEREFER(ptr) ptr.get()
@@ -513,13 +515,20 @@ private:
   auto lex_misc_operator() noexcept
     -> void;
 
+  auto lex_algebraic_operator() noexcept
+    -> void;
+
   auto skip_blank() noexcept
     -> void;
 
-  auto enqueue_error() noexcept
+  auto enqueue_error(const error::error_type error_type) noexcept
     -> void;
 
-  auto enqueue_error(const std::uint32_t begin, const std::uint32_t end) noexcept
+  auto enqueue_error(const error::error_type error_type,
+    const std::uint32_t begin, const std::uint32_t end) noexcept
+    -> void;
+
+  auto enqueue_error(const std::uint32_t at, const char *const format, ...) noexcept
     -> void;
 
   [[nodiscard]] auto inline eol() const noexcept

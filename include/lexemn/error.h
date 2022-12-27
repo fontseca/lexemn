@@ -1,5 +1,5 @@
 /*
- * charset.h -- character set handling 
+ * error.h -- error handling for lexemn
  *  ___       _______      ___    ___ _______   _____ ______   ________
  * |\  \     |\  ___ \    |\  \  /  /|\  ___ \ |\   _ \  _   \|\   ___  \
  * \ \  \    \ \   __/|   \ \  \/  / | \   __/|\ \  \\\__\ \  \ \  \\ \  \
@@ -29,23 +29,24 @@
  * Lexemn. If not, see <https://www.gnu.org/licenses/>.
  **/
 
-#ifndef CHARSET_H
-#define CHARSET_H
+#ifndef ERROR_H
+#define ERROR_H
 
-#include <cstdint>
+#include <unordered_map>
 
-namespace lexemn::charset
+namespace lexemn::error
 {
 
-[[nodiscard]] auto unicode_valid_in_identifier(const std::uint32_t ch) noexcept
-  -> bool;
+enum struct error_type
+{
+  unknown_symbol_detected,
+  too_many_decimal_points,
+  stray_in_program,
+  stray_in_program_with_suggestion,
+};
 
-[[nodiscard]] auto unicode_valid_in_number(const std::uint32_t ch) noexcept
-  -> bool;
-
-[[nodiscard]] auto offset(const char *str, const std::ptrdiff_t end) noexcept
-  -> std::uint32_t;
+extern std::unordered_map<error_type, const char *> errors_dictionary;
 
 }
 
-#endif /* CHARSET_H */
+#endif /* ERROR_H */

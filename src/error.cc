@@ -1,5 +1,5 @@
 /*
- * charset.h -- character set handling 
+ * error.cc -- error handling for lexemn
  *  ___       _______      ___    ___ _______   _____ ______   ________
  * |\  \     |\  ___ \    |\  \  /  /|\  ___ \ |\   _ \  _   \|\   ___  \
  * \ \  \    \ \   __/|   \ \  \/  / | \   __/|\ \  \\\__\ \  \ \  \\ \  \
@@ -29,23 +29,17 @@
  * Lexemn. If not, see <https://www.gnu.org/licenses/>.
  **/
 
-#ifndef CHARSET_H
-#define CHARSET_H
+#include "lexemn/error.h"
 
-#include <cstdint>
-
-namespace lexemn::charset
+namespace lexemn::error
 {
 
-[[nodiscard]] auto unicode_valid_in_identifier(const std::uint32_t ch) noexcept
-  -> bool;
-
-[[nodiscard]] auto unicode_valid_in_number(const std::uint32_t ch) noexcept
-  -> bool;
-
-[[nodiscard]] auto offset(const char *str, const std::ptrdiff_t end) noexcept
-  -> std::uint32_t;
+std::unordered_map<error_type, const char *> errors_dictionary
+{
+  { error_type::unknown_symbol_detected, "unknown symbol detected near ‘%s’" },
+  { error_type::too_many_decimal_points, "too many decimal points in number" },
+  { error_type::stray_in_program, "stray ‘%s’ in sentence" },
+  { error_type::stray_in_program_with_suggestion, "stray ‘%s’ in program; did you mean ‘%s’?" },
+};
 
 }
-
-#endif /* CHARSET_H */
