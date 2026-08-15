@@ -1,0 +1,45 @@
+{{**
+   * lexemn.lxm -- Lexemn sample source code file.
+   *
+   * https://github.com/fontseca/lexemn
+   *
+   * Copyright (C) 2026 by Jeremy Fonseca <fontseca.dev@outlook.com>
+   *
+   * This file is part of Lexemn.
+   *
+   * Lexemn is free software: you can redistribute it and/or modify it under the
+   * terms of the GNU General Public License as published by the Free Software
+   * Foundation, either version 3 of the License, or (at your option) any later
+   * version.
+   *
+   * Lexemn is distributed in the hope that it will be useful, but WITHOUT ANY
+   * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+   * FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+   *
+   * You should have received a copy of the GNU General Public License along with
+   * Lexemn. If not, see <https://www.gnu.org/licenses/>.
+   **}}
+
+{{* Inline function. *}}
+f(x, y) := x + y ^ 2;
+f := func(x: int, y: int): int => x + y ^ 2;
+
+{{* Composite function. *}}
+func f(x: int, y: int): int {
+	z := x * y * 2;
+	z := y ^ 2;
+	--z;
+	return 1 + z;
+}
+
+{{* Variable declarations. *}}
+x := 1;
+x: int := 1;
+b := false;
+b: bool := false;
+x := 42;
+x: int := 42;
+
+{{* Set declarations. *}}
+A := {1, 2, 3};
+B := {x ∈ A | x > 1};

@@ -1,0 +1,69 @@
+# Prerequisites
+*.d
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Backup
+*.bak
+*.gho
+*.ori
+*.orig
+*.tmp
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+*.smod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Logging
+.log
+
+# CMake build directories (out-of-source builds)
+/build/
+/build_*/
+/out/
+
+# CMake generated files and caches (if someone runs cmake in the root)
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+
+# Misc.
+cmake-build-*/
+bin/
+tmp/
+obj/
+.vscode/
+.idea
+build
+commit.txt
+commit.log
+todo.txt
