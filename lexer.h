@@ -103,6 +103,7 @@
     OP(QMARK,                    "?")   \
     OP(HASH,                     "#")   \
     OP(ATSIGN,                   "@")   \
+    OP(DOT,                      ".")   \
     OP(RANGE,                   "..")   \
     OP(ELLIPSIS,               "...")   \
                                         \

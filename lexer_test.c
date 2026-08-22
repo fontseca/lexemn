@@ -125,20 +125,40 @@ test_lex(void)
             fprintf(stderr, "\nACTUAL:\n");
             fprintf(stderr, "%zu tokens\n\n", stream.size);
 
+            fprintf(stderr, "%-5s %-18s %-15s %-18s %-15s\n", "IDX", "EXPECTED TYPE", "EXPECTED VALUE", "ACTUAL TYPE", "ACTUAL VALUE");
+            fprintf(stderr, "%-5s %-18s %-15s %-18s %-15s\n", "----", "-------------", "--------------", "-----------", "------------");
+
             for (size_t tok_idx = 0; tok_idx < stream.size; ++tok_idx)
             {
+                /* Handle extra tokens if actual size exceeds expected size.  */
+                if (tok_idx >= row.expected_size)
+                {
+                    struct token_t const have = stream.tokens[tok_idx];
+                    fprintf(stderr, "\033[31m%-5zu %-18s %-15s %-18s %-.*s\033[0m\n",
+                                tok_idx, "", "", TOK_NAME(have),
+                                    (int)have.val.text.len, (char const *)have.val.text.str);
+                    continue;
+                }
+
                 struct expect const  want = row.expected_tokens[tok_idx];
                 struct token_t const have = stream.tokens[tok_idx];
-
+                bool is_mismatch = (want.type != have.type);
+                char const *want_val = TOK_IS_LITERAL(want) ? want.str : "";
                 if (TOK_IS_LITERAL(want))
                 {
-                    fprintf(stderr, "%s (`%s') → %s (`%.*s')\n",
-                        TOK_NAME(want), want.str, TOK_NAME(have), (int)have.val.text.len, (char const *)have.val.text.str);
-                } else
-                {
-                    fprintf(stderr, "%s → %s\n",
-                        TOK_NAME(row.expected_tokens[tok_idx]), TOK_NAME(stream.tokens[tok_idx]));
+                    size_t const want_len = strlen(want.str);
+                    if (have.val.text.len != want_len ||
+                        memcmp(want.str, have.val.text.str, want_len) != 0)
+                    {
+                        is_mismatch = true;
+                    }
                 }
+
+                const char *color = is_mismatch ? "\033[31m" : "";
+                const char *reset = is_mismatch ? "\033[0m"  : "";
+                fprintf(stderr, "%s%-5zu %-18s %-15s %-18s %-.*s%s\n",
+                            color, tok_idx, TOK_NAME(want), want_val, TOK_NAME(have),
+                                    (int)have.val.text.len, (char const *)have.val.text.str, reset);
             }
 
             free(stream.tokens);
@@ -153,14 +173,41 @@ test_lex(void)
 
             bool const type_mismatch = want.type != have.type;
             bool const str_mismatch = TOK_IS_LITERAL(want)
-                    && 0 != strncmp(want.str, (char const *) have.val.text.str, strlen(want.str));
+                    && (have.val.text.len != strlen(want.str)
+                        || 0 != strncmp(want.str, (char const *)have.val.text.str, have.val.text.len));
 
             if (type_mismatch || str_mismatch)
             {
                 fprintf(stderr, "Failed test case #%zu at token index [%zu]:\n\n", 1 + case_idx, tok_idx);
-                rawprint(stderr, row.input);
 
-                fprintf(stderr, "\nEXPECTED:\n");
+                auto const input_str = row.input;
+                auto const tok_str   = (char *)have.val.text.str;
+                size_t tok_len       = have.val.text.len;
+
+                /* Calculate relative offset of the token inside `row.input'.  */
+                size_t const offset = tok_str >= input_str ? (size_t)(tok_str - input_str) : 0;
+                size_t const total_len = strlen(input_str);
+
+                if (offset < total_len)
+                {
+                    /* Prevent out-of-bounds slicing.  */
+                    if (offset + tok_len > total_len)
+                        tok_len = total_len - offset;
+
+                    /* Print prefix, red token, and suffix.  */
+                    fprintf(stderr, "INPUT:\n%.*s\033[31m%.*s\033[0m%s\n\n",
+                                (int)offset, input_str, (int)tok_len, tok_str,
+                                        input_str + offset + tok_len);
+                }
+                else
+                {
+                    /* Fallback to rawprint if token pointer points outside `row.input' buffer.  */
+                    fprintf(stderr, "INPUT:\n");
+                    rawprint(stderr, row.input);
+                    fprintf(stderr, "\n\n");
+                }
+
+                fprintf(stderr, "EXPECTED:\n");
                 fprintf(stderr, "  type: %s\n", TOK_NAME(want));
 
                 if (TOK_IS_LITERAL(want))

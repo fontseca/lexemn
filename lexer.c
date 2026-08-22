@@ -56,14 +56,10 @@ static struct token_spelling const token_spellings[MAX_TOKENS] = {
 };
 
 #define TOK_SPELL( token ) \
-    ( ( token ) != nullptr \
-        ? token_spellings[(token.type)].category \
-            : "" )
+    ( token_spellings[(token.type)].category )
 
 #define TOK_NAME( token ) \
-    ( ( token ) != nullptr \
-        ? token_spellings[(token.type)].name \
-            : "" )
+    ( token_spellings[(token.type)].name )
 
 /* Return non-zero value if C is a non-printable character.  */
 #define is_whitespace( c ) \
@@ -163,19 +159,12 @@ lex_setup(struct lexer_t *const lexer,
     lexer->cur = (char unsigned const *)whence;
 }
 
-/* Return non-zero value if LEXER has reached the end of the input source.  */
+/* Return non-zero value if LEXER has reached the end of the input source at
+   the given OFFSET.  */
 static bool
-eof(struct lexer_t const *const lexer)
+eof(struct lexer_t const *const lexer, int32_t const offset)
 {
-    return '\0' == *lexer->cur;
-}
-
-/* Return non-zero value if the character I bytes ahead of the current position
-   in LEXER is the end of the input source.  */
-static bool
-eof_at(struct lexer_t const *const lexer, uint32_t const i)
-{
-    return '\0' == lexer->cur[i];
+    return '\0' == *(lexer->cur + offset);
 }
 
 /* Return a pointer to the current read position in the input source of LEXER.  */
@@ -185,52 +174,49 @@ current(struct lexer_t const *lexer)
     return lexer->cur;
 }
 
-/* Return the character at the current read position in the input source
-   of LEXER without advancing the pointer.  */
+/* Return the character at OFFSET from the current read position in LEXER
+   without advancing the pointer.  */
+[[nodiscard]]
 static char unsigned
-peek(struct lexer_t const *const lexer)
+peek(struct lexer_t const *const lexer, int32_t const offset)
 {
-    return *lexer->cur;
+    return *(lexer->cur + offset);
 }
 
-/* Return the character N bytes ahead of the current position in LEXER
-   without advancing in the input source.  */
-static char unsigned
-peek_at(struct lexer_t const *const lexer, uint32_t const n)
+/* Return the UTF-32 code point N bytes ahead (or behind if N < 0)
+   of the current read position in LEXER, without advancing.  */
+[[nodiscard]]
+static char32_t
+peek_utf32(struct lexer_t const *const lexer,
+                int32_t const offset)
 {
-    return *(n + lexer->cur);
+    char unsigned const *src = lexer->cur + offset;
+    size_t ret; char32_t c32; mbstate_t state = { 0 };
+    /* When offset is negative, we need to point at the start of the UTF-8 character.
+       For that, we walk leftward as long as pointing at a continuation byte.  */
+    while (offset < 0 && (*src & 0b1100'0000) == 0b1000'0000)
+        --src;
+    ret = mbrtoc32(&c32, (char *)src, 4, &state);
+    if (ret == (size_t)-1 || ret == (size_t)-2)
+        return 0;
+    return c32;
 }
 
-/* Advance the current read position in LEXER by one byte.  */
+/* Advance the current read position in LEXER by OFFSET bytes.  */
 static void
-mov(struct lexer_t *const lexer)
+mov(struct lexer_t *const lexer, int32_t const offset)
 {
-    ++lexer->cur;
-}
-
-/* Advance the current read position in LEXER by N bytes.  */
-static void
-movn(struct lexer_t *const lexer, uint32_t const n)
-{
-    lexer->cur += n;
+    lexer->cur += offset;
 }
 
 /* Return non-zero value if the character at the current position in the
    input source matches C.  */
 static bool
-match(struct lexer_t const *const lexer, char const c)
+match(struct lexer_t *const lexer, char unsigned const c)
 {
-    return *lexer->cur == c;
-}
-
-/* Return non-zero value if the character N bytes ahead of the current
-   position in LEXER matches C.  */
-static bool
-match_at(struct lexer_t const *const lexer,
-                uint32_t const n, char const c)
-{
-    return lexer->cur[n] != '\0'
-                && lexer->cur[n] == c;
+    if (eof(lexer, 0) || *lexer->cur != c)
+        return false;
+    return ++lexer->cur, true;
 }
 
 /* Skip any white space at the current position in the input source
@@ -250,28 +236,30 @@ skip_comment(struct lexer_t *const lexer)
     /* This function expects the current character to be poiting at
        the first `{' in the comment opening sequence `{{*'; this is
        the reason why I move 3 bytes forward.   */
-    movn(lexer, 3);
+    match(lexer, '{');
+    match(lexer, '{');
+    match(lexer, '*');
 
-    while (!eof(lexer))
+    while (!eof(lexer, 0))
     {
         /* Look for the closing `*' character.  */
-        if (!match(lexer, '*'))
+        if (peek(lexer, 0) != '*')
         {
-            mov(lexer);
+            mov(lexer, 1);
             continue;
         }
 
         /* If found, check if it is immediately followed by the
           sequence `}}'.  */
-        if (match_at(lexer, 1, '}') && match_at(lexer, 2, '}'))
+        if (peek(lexer, 1) == '}' && peek(lexer, 2) == '}')
         {
             /* Consume the closing comment bytes `*}}' and finish.  */
-            movn(lexer, 3);
+            mov(lexer, 3);
             return;
         }
 
         /* Move one byte forward otherwise.  */
-        mov(lexer);
+        mov(lexer, 1);
     }
 }
 
@@ -306,19 +294,17 @@ static int
 lex_string(struct lexer_t *const lexer,
                 struct tstream_t *const stream)
 {
+    match(lexer, '"');  /* Skip opening `"'.  */
     struct token_t tok = { .type = TOK_STRING };
-
-    /* The token we are going to lex should start here.  */
-    mov(lexer); /* Skip opening `"'.  */
     tok.val.text.str = current(lexer);
 
-    while (!eof(lexer) && !match(lexer, '"'))
+    while (!eof(lexer, 0) && peek(lexer, 0) != '"')
     {
         ++tok.val.text.len;
-        mov(lexer);
+        mov(lexer, 1);
     }
 
-    mov(lexer); /* Skip closing `"'.  */
+    match(lexer, '"'); /* Skip closing `"'.  */
     tstream_push(stream, tok);
     return 0;
 }
@@ -357,13 +343,13 @@ lex_identifier(struct lexer_t *const lexer,
     for (;;)
     {
         offset = mbrtoc32(&c32, (char const *) current(lexer), SIZE_MAX, &st1);
-        if (!is_identifier(c32) && !isdigit(peek(lexer)))
+        if (!is_identifier(c32) && !isdigit(peek(lexer, 0)))
         {
             /* Character found is not valid to be part of an identifier.  */
             break;
         }
 
-        movn(lexer, (uint32_t)offset);
+        mov(lexer, (int)offset);
         tok.val.text.len += offset;
     }
 
@@ -371,42 +357,250 @@ lex_identifier(struct lexer_t *const lexer,
     return 0;
 }
 
-/* Scan a number at the current position in the input source of LEXER and
-  push it onto STREAM.  The scanned token is distinguished is between a
-  decimal, hexadecimal, octal and binary number.  */
+/* Scan a number literal value at the current read position in the input source of
+   LEXER and push it as a token onto STREAM. The number can be expressed in any of
+   the following numerical bases: binary (prefixed with `0b' or `0B'), octal (prefixed
+   with `0o' or `0O'), hexadecimal (prefixed with `0x' or `0X'), or decimal, the default
+   when no prefix is provided. To enhance the readability of big literals, an optional
+   underscore character (`_') can be placed between the digits.
+
+   Decimal and hexadecimal literals allow a radix point (`.') to split the whole number
+   part from the fractional part.  At most one point is permitted, otherwise a syntax
+   error is raised.  Very large or small numbers can be written in scientific notation
+   by using the letters `E' or `e' for decimal, and `P' or `p' for hexadecimals.  The
+   significand is a real number, whereas the exponent is always a base-10 integer;
+   trying to use a dot in the exponent raises a syntax error.  If the number is base-16
+   and the exponent contains any of the hexadecimal letters, the number is truncated up
+   to the last valid decimal digit.
+
+   Lexemn supports arithmetic multiplication by juxtaposition to type expressions
+   in a more natural way. Trying to multiply the factors `2' and `x' can be arranged
+   as `2x', without having to write `2 * x'.  Note that the aforementioned symbols
+   `e', `p' and `_' are completely valid identifiers on their own.  Consequently, in
+   expressions such as `2e', `2eee', `2e++', `2_', `2__1', and `2e_', they lose their
+   special literal meaning and are scanned as regular names rather than triggering
+   syntax errors.  To prevent unexpected behavior, numeric literals must be formatted
+   unambiguously.
+
+   When two successive dots are encountered in the middle of a number, they are scanned
+   as a range operator.  The operands of a range can be either integer or floating-point
+   constants: `1.5..5.5' evaluates to the sequence of numbers between `1.5' and `5.5'.
+   Likewise, in an expression such as `.0...10', the three consecutive dots are scanned
+   as an ellipsis operator; however, if `.10' is intended to be a fractional number, it
+   must be explicitly written as `.0..0.10'.  */
 [[nodiscard]]
 static int
 lex_number(struct lexer_t *const lexer,
                 struct tstream_t *const stream)
 {
-    /* True means the number being parsed has encounter a decimal point.
-       This flag helps know when to stop searching for a decimal point.  */
-    uint8_t point_count = 0;
-    struct token_t tok = { .type = TOK_NUMBER };
-    tok.val.text.str = current(lexer);
-
-    while (isdigit(peek(lexer)) || match(lexer, '.'))
+    enum : char unsigned
     {
-        if (match(lexer, '.'))
-            ++point_count;
+        HEX = 1,
+        DEC = HEX << 1,
+        OCT = HEX << 2,
+        BIN = HEX << 3
+    };
+    short unsigned radix  = DEC; /* Default number base.  */
+    struct token_t number = { .type = TOK_NUMBER, .val = { .text = { .str = current(lexer) } } };
+    static constexpr char unsigned mask[256] =
+    {
+        ['0'] = HEX | DEC | OCT | BIN,
+        ['1'] = HEX | DEC | OCT | BIN,
+        ['2'] = HEX | DEC | OCT,
+        ['3'] = HEX | DEC | OCT,
+        ['4'] = HEX | DEC | OCT,
+        ['5'] = HEX | DEC | OCT,
+        ['6'] = HEX | DEC | OCT,
+        ['7'] = HEX | DEC | OCT,
+        ['8'] = HEX | DEC,
+        ['9'] = HEX | DEC,
+        ['a'] = HEX,
+        ['b'] = HEX,
+        ['c'] = HEX,
+        ['d'] = HEX,
+        ['e'] = HEX,
+        ['f'] = HEX,
+        ['A'] = HEX,
+        ['B'] = HEX,
+        ['C'] = HEX,
+        ['D'] = HEX,
+        ['E'] = HEX,
+        ['F'] = HEX,
+    };
 
-        if (point_count > 1)
+    /* Check if the character C is a legal digit for the base system of the current
+       number being scanned.  */
+#define valid_in_radix(c) \
+    ( radix & mask[( c )] )
+
+    if (match(lexer, '0'))
+    {
+        ++number.val.text.len;
+        switch (peek(lexer, 0))
         {
+            default: radix = DEC; break;
+            case 'b': case 'B': radix = BIN; break;
+            case 'o': case 'O': radix = OCT; break;
+            case 'x': case 'X': radix = HEX; break;
+        }
+
+        if (radix != DEC)
+        {
+            char unsigned next_ch = peek(lexer, 1);
+
+            /* If the character following the radix indicator is invalid according
+               to these bases, tokenize the just consumed `0' as a regular decimal
+               and let the lexer scan the indicator as an identifier.  When entering
+               an expression such as `0b', it is interpreted as `0' times `b'.  */
+            if ((radix == BIN || radix == OCT) && !valid_in_radix(next_ch))
+                goto assmbl_number;
+
+            /* If the expression entered is something like `0x.' or `0x..', instead
+               of trying to guess how to interpret it, raise a syntax error.  */
+            if (radix == HEX && next_ch == '.' && !valid_in_radix(next_ch = peek(lexer, 2)))
+            {
+                return -1; /* Invalid syntax: no digits in hexadecimal floating constant.  */
+            }
+
+            /* If the expression entered is something like `0xG' or `0x++', then just
+               tokenize the `0' as a regular decimal, and let the scanner decide what
+               to do with the remaining sequence of characters.  */
+            if (radix == HEX && !valid_in_radix(next_ch))
+                goto assmbl_number;
+
+            /* Otherwise append the base indicator to the `0' of the non-decimal number.  */
+            ++number.val.text.len;
+            mov(lexer, 1);
+        }
+    }
+
+    short unsigned exponents = 0; /* Count of exponent indicators.  */
+    short unsigned points = 0;    /* Count of radix points.  */
+
+    /* Do scan the actual number literal.  */
+    while (!is_whitespace(peek(lexer, 0)) && !eof(lexer, 0))
+    {
+        /* Check if range or ellipsis.  */
+        if (peek(lexer, 0) == '.' && peek(lexer, 1) == '.')
+        {
+            bool const ellipsis = peek(lexer, 2) == '.';
+            tstream_push(stream, number);
+            tstream_push(stream, (struct token_t) { .type = ellipsis ? TOK_ELLIPSIS : TOK_RANGE });
+            mov(lexer, ellipsis ? 3 : 2);
+            return 0;
+        }
+
+        auto const ch = peek(lexer, 0);
+
+        /* Check if radix point.  */
+        if (ch == '.')
+        {
+            /* This symbol separates the integer number from the fractional part.
+               It is only supported in hexadecimal and decimal.  An syntax error
+               is trigger if used in another abase.  */
+            if (radix != DEC && radix != HEX)
+            {
+                return -1; /* Invalid syntax: radix separator is not permitted
+                              in this base.  */
+            }
+
+            /* When there are multiple occurrences of a point raise a syntax error.
+               An expression such as `1.2.3' is illegal.  */
+            if (++points > 1)
+            {
+                return -1; /* Invalid syntax: too much points.  */
+            }
+
+            /* If the number is written in scientific notation, the exponent cannot
+               cannot be expressed as a floating-point. An expression such as `2e1.5'
+               is illegal.  */
+            if (exponents)
+            {
+                return -1; /* Invalid syntax: no points allowed after exponent.  */
+            }
+
+            ++number.val.text.len;
+            mov(lexer, 1);
+            continue;
+        }
+
+        /* Check if scientific notation.  */
+        if ((radix == DEC && (ch == 'e' || ch == 'E'))
+            || (radix == HEX && (ch == 'p' || ch == 'P')))
+        {
+            /* If the number was previously accepted as written in scientific notation, but
+               there is another occurrence of an `e' that is not a sequence, the expression
+               is illegal due to ambiguities. For instance: `2e2e2', it can be interpreted
+               in several ways, so the best case here is to raise a syntactic error.  */
+            if (++exponents > 1)
+            {
+                return -1; /* Syntax error: too much exponent indicators in number.  */
+            }
+
+            /* The character after the exponent indicator.  */
+            auto const next_ch = peek(lexer, 1);
+
+            /* True when the number is express as `2e+6'.  */
+            bool const has_sign = next_ch == '+' || next_ch == '-';
+
+            /* Select the first digit of the exponent to later ascertain it is a valid
+               base-10 number.  */
+            auto const digit_ch = has_sign ? peek(lexer, 2) : next_ch;
+
+            if (!(DEC & mask[digit_ch]))
+                goto assmbl_number;
+
+            if (has_sign)
+            {
+                ++number.val.text.len; /* Consume the `+' or `-'.  */
+                mov(lexer, 1);
+            }
+
+            /* Consume the exponent indicator.  */
+            ++number.val.text.len;
+            mov(lexer, 1);
+            continue;
+        }
+
+        /* Check if thousand separator.  */
+        if (ch == '_')
+        {
+            auto const next = peek(lexer, 1);
+            /* If the character following the thousand  separator is not a valid digit
+               in the current  number's base, scan the number and let the lexer decide
+               what do next.  For example, if entered, `1_000_a', the ending `_a' must
+               be treated as an identifier,  resulting in `1_000*_a'; but if entering
+               `0x1_000_a',  the `_a'  is completely permitted as part of a hexadecimal
+               number.  */
+            if (!valid_in_radix(next))
+                goto assmbl_number;
+
+            ++number.val.text.len;
+            mov(lexer, 1);
+            continue;
+        }
+
+        /* Check if the current character belongs to the numerical base of the number
+           being scanned.  If the number is in scientific notation and we are scanning
+           the exponent, we must assert it is in base-10.  */
+        if ( !((exponents ? DEC : radix) & mask[ch]) )
+        {
+            /* If a digit is found so far, then the number was expressed incorrectly
+               and a syntax error must be raised.  For instance the `2' in `0b01012'.  */
+            if (isdigit(ch))
+            {
+                return -1; /* Invalid syntax: digit cannot be part of current base.  */
+            }
+
             break;
         }
 
-        ++tok.val.text.len;
-        mov(lexer);
-
-        /* For cases such as `.a', when the character after the . is not a digit.  */
-        // if (1 == point_count && !isdigit(peek(lexer)) && 0 == lexer->lxm_size)
-        // {
-        //     lxm_reset(lexer);
-        //     return (size_t)-1;
-        // }
+        ++number.val.text.len;
+        mov(lexer, 1);
     }
 
-    tstream_push(stream, tok);
+assmbl_number:
+    tstream_push(stream, number);
     return 0;
 }
 
@@ -431,25 +625,26 @@ lex_number(struct lexer_t *const lexer,
              ,---> T_CMD            ,---> T_CMDARG         ,---> T_CMDARG
         \exec  -f "/path/to/file.lxm" -f /path/to/file2.lxm
                 `---> T_CMDARG         `---> T_CMDARG       */
-static size_t
+static int
 lex_cmd(struct lexer_t *const lexer,
             struct tstream_t *const stream)
 {
-    if (eof_at(lexer, 1) || is_whitespace(peek_at(lexer, 1)))
+    if (eof(lexer, 1) || is_whitespace(peek(lexer, 1)))
     {
         // error = true; /* unknown command  */
-        return (size_t)-1;
+        return -1;
     }
 
     /* Parse command name.  */
 
     struct token_t cmd = { .type = TOK_CMD };
     cmd.val.text.str = current(lexer);
-    mov(lexer);
+    match(lexer, '\\');
+    ++cmd.val.text.len;
 
-    while (!is_whitespace(peek(lexer)) && !eof(lexer))
+    while (!is_whitespace(peek(lexer, 0)) && !eof(lexer, 0))
     {
-        mov(lexer);
+        mov(lexer, 1);
         ++cmd.val.text.len;
     }
 
@@ -458,22 +653,22 @@ lex_cmd(struct lexer_t *const lexer,
     /* Parse command arguments (if any).  */
 
     /* Skip any white space in is between the command arguments.  */
-    while (is_whitespace(peek(lexer)))
-        mov(lexer);
+    while (is_whitespace(peek(lexer, 0)))
+        mov(lexer, 1);
 
     /* If end of string, then we exit.  */
-    if (eof(lexer))
+    if (eof(lexer, 0))
         return 0;
 
     /* As long as we are not at the end of the string,
       then we are free to scan arguments.  */
-    while (!eof(lexer))
+    while (!eof(lexer, 0))
     {
         /* These arguments are expected to be separated by white spaces,
            so if any is found,  we must skip it until we find a parsable
            token.  */
-        while (is_whitespace(peek(lexer)))
-            mov(lexer);
+        while (is_whitespace(peek(lexer, 0)))
+            mov(lexer, 1);
 
         struct token_t arg = { .type = TOK_CMD_ARG };
         arg.val.text.str = current(lexer);
@@ -483,28 +678,27 @@ lex_cmd(struct lexer_t *const lexer,
            the closing string character. */
         if (match(lexer, '"') || match(lexer, '\''))
         {
-            mov(lexer);
             ++arg.val.text.len;
-            while (!eof(lexer) && !match(lexer, '"') && !match(lexer, '\''))
+            while (!eof(lexer, 0) && peek(lexer, 0) != '"' && peek(lexer, 0) != '\'')
             {
-                mov(lexer);
+                mov(lexer, 1);
                 ++arg.val.text.len;
             }
 
-            mov(lexer);
+            mov(lexer, 1);
             ++arg.val.text.len;
             tstream_push(stream, arg);
             continue;
         }
 
         /* If end of string, then we exit.  */
-        if (eof(lexer))
+        if (eof(lexer, 0))
             continue;
 
         /* At this point we have found a valid argument.  */
-        while (!is_whitespace(peek(lexer)) && !eof(lexer))
+        while (!is_whitespace(peek(lexer, 0)) && !eof(lexer, 0))
         {
-            mov(lexer);
+            mov(lexer, 1);
             ++arg.val.text.len;
         }
 
@@ -538,7 +732,7 @@ lex_const(struct lexer_t *const lexer,
     /* Check if the next byte after `$' is a valid character.
        It should be any of [0-9a-zA-Z_], otherwise the constant
        is ill-formed.  */
-    if (eof_at(lexer, 1) || (!isalnum(peek_at(lexer, 1)) && !match_at(lexer, 1, '_')))
+    if (eof(lexer, 1) || (!isalnum(peek(lexer, 1)) && peek(lexer, 1) != '_'))
     {
         // error = true; /* malformed constant  */
         return -1;
@@ -546,12 +740,12 @@ lex_const(struct lexer_t *const lexer,
 
     struct token_t tok = { .type = TOK_CONST };
     tok.val.text.str = current(lexer);
-    mov(lexer);
-
     ++tok.val.text.len;
-    while (isalnum(peek(lexer)) || match(lexer, '_'))
+    match(lexer, '$');
+
+    while (isalnum(peek(lexer, 0)) || peek(lexer, 0) == '_')
     {
-        mov(lexer);
+        mov(lexer, 1);
         ++tok.val.text.len;
     }
 
@@ -571,13 +765,13 @@ lex_start(struct lexer_t *const lexer,
     mbstate_t st1 = {0};
 
     /* Start scanning input.  */
-    while (!eof(lexer))
+    while (!eof(lexer, 0))
     {
         /* Skip any white space before the next token, if any.  */
         skip_blank(lexer);
 
         /* Exit execution flow if pointer is at end of file.  */
-        if (eof(lexer))
+        if (eof(lexer, 0))
             break;
 
         /* Reset memory for the next token to be scanned and parsed.  */
@@ -625,7 +819,7 @@ lex_start(struct lexer_t *const lexer,
     case c32: \
     { \
         tstream_push(stream, (struct token_t) { .type = typ }); \
-        movn(lexer, (uint32_t)offset); \
+        mov(lexer, (int)offset); \
         continue; \
     }
 #endif
@@ -661,35 +855,36 @@ lex_start(struct lexer_t *const lexer,
         }
 
         /* Skip a comment block.  */
-        if (match(lexer, '{')
-            && match_at(lexer, 1, '{')
-            && match_at(lexer, 2, '*'))
+        if (peek(lexer, 0) == '{' && peek(lexer, 1) == '{' && peek(lexer, 2) == '*')
         {
             skip_comment(lexer);
             continue;
         }
 
         /* Lex a string.  */
-        if (match(lexer, '"'))
+        if (peek(lexer, 0) == '"')
         {
             (void)lex_string(lexer, stream);
             continue;
         }
 
         /* Lex a number.  */
-        if (isdigit(peek(lexer)) || match(lexer, '.'))
+        if (isdigit(peek(lexer, 0)) || peek(lexer, 0) == '.')
         {
-            if (match(lexer, '.') && match_at(lexer, 1, '.'))
+            /* Range and ellipsis check.  */
+            if (peek(lexer, 0) == '.' && peek(lexer, 1) == '.')
             {
-                if (match_at(lexer, 2, '.'))
-                {
-                    tstream_push(stream, (struct token_t) { .type = TOK_ELLIPSIS });
-                    movn(lexer, 3);
-                    continue;
-                }
+                bool const ellipsis = peek(lexer, 2) == '.';
+                tstream_push(stream, (struct token_t) { .type = ellipsis ? TOK_ELLIPSIS : TOK_RANGE });
+                mov(lexer, ellipsis ? 3 : 2);
+                continue;
+            }
 
-                tstream_push(stream, (struct token_t) { .type = TOK_RANGE });
-                movn(lexer, 2);
+            /* Dot operator check.  */
+            if (peek(lexer, 0) == '.' && !isdigit(peek(lexer, 1)))
+            {
+                tstream_push(stream, (struct token_t) { .type = TOK_DOT });
+                mov(lexer, 1);
                 continue;
             }
 
@@ -714,10 +909,10 @@ lex_start(struct lexer_t *const lexer,
     case ch1: \
     { \
         type = type1; \
-        if (!eof_at(lexer, 1) && match_at(lexer, 1, ch2)) \
+        if (!eof(lexer, 1) && peek(lexer, 1) == ch2) \
         { \
             type = type2; \
-            mov(lexer); \
+            mov(lexer, 1); \
         } \
         break; \
     }
@@ -728,17 +923,17 @@ lex_start(struct lexer_t *const lexer,
     case ch1: \
     { \
         type = type1; \
-        if (!eof_at(lexer, 1)) \
+        if (!eof(lexer, 1)) \
         { \
-            if (match_at(lexer, 1, ch2)) \
+            if (peek(lexer, 1) == ch2) \
             { \
                 type  = type2; \
-                mov(lexer); \
+                mov(lexer, 1); \
             } \
-            else if (match_at(lexer, 1, ch3)) \
+            else if (peek(lexer, 1) == ch3) \
             { \
                 type  = type3; \
-                mov(lexer); \
+                mov(lexer, 1); \
             } \
         } \
         break; \
@@ -750,40 +945,69 @@ lex_start(struct lexer_t *const lexer,
     case ch1: \
     { \
         type = type1; \
-        if (!eof_at(lexer, 1)) \
+        if (!eof(lexer, 1)) \
         { \
-            if (match_at(lexer, 1, ch2)) \
+            if (peek(lexer, 1) == ch2) \
             { \
                 type  = type2; \
-                mov(lexer); \
+                mov(lexer, 1); \
             } \
-            else if (match_at(lexer, 1, ch3)) \
+            else if (peek(lexer, 1) == ch3) \
             { \
                 type  = type3; \
-                mov(lexer); \
+                mov(lexer, 1); \
             } \
-            else if (match_at(lexer, 1, ch4)) \
+            else if (peek(lexer, 1) == ch4) \
             { \
                 type  = type4; \
-                mov(lexer); \
+                mov(lexer, 1); \
             } \
         } \
         break; \
     }
 #endif
 
-        switch (peek(lexer))
+        switch (peek(lexer, 0))
         {
             default  :  break;
             case '$' :  lex_const(lexer, stream); continue;
             case '\\':  lex_cmd(lexer, stream);   continue;
+            case '+':
+            {
+                type = TOK_PLUS;
+                if (peek(lexer, 1) == '+')
+                {
+                    if (is_identifier(peek_utf32(lexer, -1))
+                        || is_identifier(peek_utf32(lexer, 2)))
+                    {
+                        type = TOK_INC;
+                        mov(lexer, 1);
+                    }
+                }
+
+                break;
+            }
+            case '-':
+            {
+                type = TOK_MINUS;
+                if (peek(lexer, 1) == '-')
+                {
+                    if (is_identifier(peek_utf32(lexer, -1))
+                        || is_identifier(peek_utf32(lexer, 2)))
+                    {
+                        type = TOK_DEC;
+                        mov(lexer, 1);
+                    }
+                }
+
+                break;
+            }
             ch8_case1('(', TOK_LPAREN)
             ch8_case1(')', TOK_RPAREN)
             ch8_case1('[', TOK_LBRACKET)
             ch8_case1(']', TOK_RBRACKET)
             ch8_case1('{', TOK_LBRACE)
             ch8_case1('}', TOK_RBRACE)
-
             ch8_case1(',', TOK_COMMA)
             ch8_case1(';', TOK_SEMICOLON)
             ch8_case1('=', TOK_EQ)
@@ -796,8 +1020,6 @@ lex_start(struct lexer_t *const lexer,
             ch8_case1('/', TOK_DIV_1)
             ch8_case2('&', TOK_AND,   '&', TOK_AND_AND)
             ch8_case2('|', TOK_OR,    '|', TOK_OR_OR)
-            ch8_case2('+', TOK_PLUS,  '+', TOK_INC)
-            ch8_case2('-', TOK_MINUS, '-', TOK_DEC)
             ch8_case2('*', TOK_MULT,  '*', TOK_EXP)
             ch8_case2(':', TOK_COLON, '=', TOK_ASSIGN)
             ch8_case2('!', TOK_NOT,   '=', TOK_NEQ_1)
@@ -806,7 +1028,7 @@ lex_start(struct lexer_t *const lexer,
         }
 
         tstream_push(stream, (struct token_t) { .type = type });
-        mov(lexer);
+        mov(lexer, 1);
     }
 
     tstream_push(stream, (struct token_t) { .type = TOK_END });
