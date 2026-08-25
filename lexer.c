@@ -288,7 +288,8 @@ tstream_push(struct tstream_t *const stream,
 }
 
 /* Scan a string at the current position in the input source of LEXER
-   and push it onto STREAM.  */
+   and push it onto STREAM.  Escaped backslashes (`\\') and double quotes
+   (`\"') are consumed as part of the token.  */
 [[nodiscard]]
 static int
 lex_string(struct lexer_t *const lexer,
@@ -300,8 +301,22 @@ lex_string(struct lexer_t *const lexer,
 
     while (!eof(lexer, 0) && peek(lexer, 0) != '"')
     {
+        if (peek(lexer, 0) == '\\')
+        {
+            auto const next_ch = peek(lexer, 1);
+            if (next_ch == '\\' || next_ch == '"')
+            {
+                mov(lexer, 1);
+                ++tok.val.text.len;
+            }
+        }
         ++tok.val.text.len;
         mov(lexer, 1);
+    }
+
+    if (eof(lexer, 0))
+    {
+        return -1; /* Syntax error: missing string closer.  */
     }
 
     match(lexer, '"'); /* Skip closing `"'.  */

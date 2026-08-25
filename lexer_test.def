@@ -20,6 +20,8 @@
  * Lexemn. If not, see <https://www.gnu.org/licenses/>.
  **/
 
+/* Decimal number literals.  */
+
 CASE("0 042 123456 3.14159 .5 1. 1.e2 .0e2 .5e-3 1e10 1.6E-19  6.022e+23 10.0e+20 1_0 1_00 "
      "1_000 1_000_000 1e5..1e7 1.2..1.8 1.0e+2..1.0e+3 0e1_000 0e+1_000 0e-1_000 2e 2E 2ee "
      "2EE 2eee 2e+a _2_ 2__ 2_1 2__1 _2___1 _2 1.0_0_0 1_0.0_1 -1_1 -1e-1_000 +1e-1_000 +0 "
@@ -76,6 +78,8 @@ CASE("0 042 123456 3.14159 .5 1. 1.e2 .0e2 .5e-3 1e10 1.6E-19  6.022e+23 10.0e+2
      { TOK_NUMBER, ".1"        }, { TOK_NUMBER, "2"         }, { TOK_NUMBER, ".1"        },
      { TOK_NUMBER, "2e1234"    }, { TOK_NAME,   "x"         }, { TOK_INC                 }),
 
+/* Hexadecimal number literals.  */
+
 CASE("0x0 0x1F 0XFF80 0xabcdef 0xFF_FF_00_00 0x 0 0x+1 0xx 3x 2xx 0x1 2x8 0x_12 0x__ 0x1_ 0xe   "
      "0xaAbBcCdDeEfF 0xaAbBcCdDeEfFgG 0xFF__00 0x0x12 00000xA1 0xa_b_c_d_e_f -0x1 0xa++ 0x++    "
      "0x1.0 0x1. 0x.8 0x1.0p0 0x1.p1 0x.8p2 0x1.0p+10 0x1.0p-10 0x1.0P0 0x1.0p1_000 0x1_0.0_1p0 "
@@ -119,6 +123,8 @@ CASE("0x0 0x1F 0XFF80 0xabcdef 0xFF_FF_00_00 0x 0 0x+1 0xx 3x 2xx 0x1 2x8 0x_12 
      { TOK_NUMBER, "0x1234P+1234"   }, { TOK_NAME,   "ABCDEF"         }, { TOK_NUMBER, "0x1234P1234"    },
      { TOK_NAME,   "ABCDEF"         }, { TOK_NUMBER, "0x1234P1234"    }, { TOK_NAME,   "XA"             }),
 
+/* Binary number literals.  */
+
 CASE("0b0 0b1 0b1010 0B11001010 0b1111_0000_1010 0b 0 0b+1 0bb 3b 2bb 0b1 2b8 0b_10 0b__ 0b1_ "
      "0b1010a 0b11__00 0b0b10 00000b1 0b1_0_1_0 -0b1 0b1++ 0b++ 0b1e 11 00",
      { TOK_NUMBER, "0b0"        }, { TOK_NUMBER, "0b1"              }, { TOK_NUMBER, "0b1010"    },
@@ -137,6 +143,8 @@ CASE("0b0 0b1 0b1010 0B11001010 0b1111_0000_1010 0b 0 0b+1 0bb 3b 2bb 0b1 2b8 0b
      { TOK_PLUS                 }, { TOK_PLUS                       }, { TOK_NUMBER, "0"         },
      { TOK_NAME,   "b"          }, { TOK_INC                        }, { TOK_NUMBER, "0b1"       },
      { TOK_NAME,   "e"          }, { TOK_NUMBER, "11"               }, { TOK_NUMBER, "00"        }),
+
+/* Octal number literals.  */
 
 CASE("0o0 0o755 0O777 0o123_456 0o1_2_3_4_5_6_7 0o 0 0o+1 0oo 3o 2oo 0o1 2o8 0o_12 0o__ 0o1_ "
      "0o755a 0o77__00 0o0o12 00000o1 -0o1 0o755++ 0o++ 0oe",
@@ -158,7 +166,22 @@ CASE("0o0 0o755 0O777 0o123_456 0o1_2_3_4_5_6_7 0o 0 0o+1 0oo 3o 2oo 0o1 2o8 0o_
 
 /* String literals.  */
 
-CASE("let const char *str\t\t\t\t\n\n\n\v\r:=\"Lorem ipsum dolor sit amet.\" and \"4x^2 + 5 = 13\"",
+CASE(R"("" "     " "This is a string." "This is an \"escaped\" string."
+     "Line 1\nLine 2\nLine3\tTab" "\\\\" "           pad           "
+     " {{* comment *}} " "if (x == \"🍌水你好\") { return 0; }"
+     "\x41\x42\x43"
+     let const char *str := "Lorem ipsum dolor sit amet." and "4x^2 + 5 = 13"
+     "\"" "\\" "\\\"" "\\\\" "\\\\\"" " \ " "''")",
+     { TOK_STRING, "" },
+     { TOK_STRING, "     " },
+     { TOK_STRING, "This is a string." },
+     { TOK_STRING, "This is an \\\"escaped\\\" string." },
+     { TOK_STRING, "Line 1\\nLine 2\\nLine3\\tTab" },
+     { TOK_STRING, "\\\\\\\\" },
+     { TOK_STRING, "           pad           " },
+     { TOK_STRING, " {{* comment *}} " },
+     { TOK_STRING, "if (x == \\\"🍌水你好\\\") { return 0; }" },
+     { TOK_STRING, "\\x41\\x42\\x43" },
      { TOK_NAME, "let" },
      { TOK_NAME, "const" },
      { TOK_NAME, "char" },
@@ -167,14 +190,14 @@ CASE("let const char *str\t\t\t\t\n\n\n\v\r:=\"Lorem ipsum dolor sit amet.\" and
      { TOK_ASSIGN },
      { TOK_STRING, "Lorem ipsum dolor sit amet." },
      { TOK_NAME, "and" },
-     { TOK_STRING, "4x^2 + 5 = 13" }),
-
-/*
-CASE("\"Hello \\\"World\\\"\" \"Line 1\\nLine 2\" \"Set: ∩ ∪ ⊆ Ø\"",
-     { TOK_STRING, "\"Hello \\\"World\\\"\"" },
-     { TOK_STRING, "\"Line 1\\nLine 2\"" },
-     { TOK_STRING, "\"Set: ∩ ∪ ⊆ Ø\"" }),
-*/
+     { TOK_STRING, "4x^2 + 5 = 13" },
+     { TOK_STRING, "\\\"" },
+     { TOK_STRING, "\\\\" },
+     { TOK_STRING, "\\\\\\\"" },
+     { TOK_STRING, "\\\\\\\\" },
+     { TOK_STRING, "\\\\\\\\\\\"" },
+     { TOK_STRING, " \\ " },
+     { TOK_STRING, "''" }),
 
 /* Arithmetic operators.  */
 CASE("+ - * / ÷ % +- ** ⌊x + 1⌋*⌈y - 2⌉ + [a, b]* {c} ++a%b**(-4) "
