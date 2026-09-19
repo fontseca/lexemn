@@ -23,6 +23,7 @@ cmake_minimum_required(VERSION 3.20)
 project(lexemn LANGUAGES C VERSION 0.1.0)
 
 set(CMAKE_C_STANDARD 23)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 enable_testing()
 
@@ -44,20 +45,29 @@ set(COMPILE_FLAGS
     -Wno-unused-parameter    # Suppress unused parameter noise if needed)
 )
 
-add_library(lexer OBJECT lexer.c lexer.h)
+# Core Libraries.
 
-target_include_directories(lexer PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_compile_options(lexer PRIVATE ${COMPILE_FLAGS})
+add_library(lex STATIC lex.c lex.h errors.c loc.c)
+target_link_libraries(lex PRIVATE m)
+target_include_directories(lex PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_options(lex PRIVATE ${COMPILE_FLAGS})
 
 # Main executable
-add_executable(lexemn.out lexemn.c)
-target_link_libraries(lexemn.out PRIVATE lexer readline)
+
+add_executable(lexemn.out lexemn.c errors.c loc.c)
+target_link_libraries(lexemn.out PRIVATE lex readline m)
 target_compile_options(lexemn.out PRIVATE ${COMPILE_FLAGS})
 
-# Unit test executable
-add_executable(tests.out lexer_test.c)
-target_link_libraries(tests.out PRIVATE lexer)
-target_compile_options(tests.out PRIVATE ${COMPILE_FLAGS})
+# Helper object target for test compilation of lexemn.c
 
-# CTest Registration (pointed to executable build artifact target)
-add_test(NAME run_unit_test COMMAND tests.out)
+add_library(lexemn_test_obj OBJECT lexemn.c)
+target_compile_options(lexemn_test_obj PRIVATE ${COMPILE_FLAGS})
+target_compile_definitions(lexemn_test_obj PRIVATE main=lexemn_main)
+target_include_directories(lexemn_test_obj PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# Unit tests.
+
+add_executable(test_lex.out lex_test.c errors.c loc.h $<TARGET_OBJECTS:lexemn_test_obj>)
+target_link_libraries(test_lex.out PRIVATE lex readline m)
+target_compile_options(test_lex.out PRIVATE ${COMPILE_FLAGS})
+add_test(NAME test_lex COMMAND test_lex.out)

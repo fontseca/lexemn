@@ -26,8 +26,11 @@
 #include <stdlib.h>
 #include <uchar.h>
 #include <stdio.h>
+#include <sys/stat.h>
 
-#include "lexer.h"
+#include "lexemn.h"
+#include "lex.h"
+#include "errors.h"
 
 /* Reflect how the token's text is managed in memory.  */
 enum spell_type : short unsigned
@@ -151,46 +154,14 @@ static struct token_spelling const token_spellings[MAX_TOKENS] = {
         || is_between(( c ), 0xD0000, 0xDFFFD)  \
         || is_between(( c ), 0xE0000, 0xEFFFD))
 
-void
-lex_setup(struct lexer_t *const lexer,
-                char unsigned const *const whence)
-{
-    lexer->buf = (char unsigned const *)whence;
-    lexer->cur = (char unsigned const *)whence;
-}
-
-/* Return non-zero value if LEXER has reached the end of the input source at
-   the given OFFSET.  */
-static bool
-eof(struct lexer_t const *const lexer, int32_t const offset)
-{
-    return '\0' == *(lexer->cur + offset);
-}
-
-/* Return a pointer to the current read position in the input source of LEXER.  */
-static char unsigned const *
-current(struct lexer_t const *lexer)
-{
-    return lexer->cur;
-}
-
-/* Return the character at OFFSET from the current read position in LEXER
-   without advancing the pointer.  */
-[[nodiscard]]
-static char unsigned
-peek(struct lexer_t const *const lexer, int32_t const offset)
-{
-    return *(lexer->cur + offset);
-}
-
 /* Return the UTF-32 code point N bytes ahead (or behind if N < 0)
    of the current read position in LEXER, without advancing.  */
 [[nodiscard]]
-static char32_t
-peek_utf32(struct lexer_t const *const lexer,
-                int32_t const offset)
+static size_t
+peek_utf32(struct lexemn const *const lexemn,
+                int32_t offset, char32_t *const result)
 {
-    char unsigned const *src = lexer->cur + offset;
+    char unsigned const *src = lexemn->p_head->cur + offset;
     size_t ret; char32_t c32; mbstate_t state = { 0 };
     /* When offset is negative, we need to point at the start of the UTF-8 character.
        For that, we walk leftward as long as pointing at a continuation byte.  */
@@ -199,177 +170,154 @@ peek_utf32(struct lexer_t const *const lexer,
     ret = mbrtoc32(&c32, (char *)src, 4, &state);
     if (ret == (size_t)-1 || ret == (size_t)-2)
         return 0;
-    return c32;
-}
-
-/* Advance the current read position in LEXER by OFFSET bytes.  */
-static void
-mov(struct lexer_t *const lexer, int32_t const offset)
-{
-    lexer->cur += offset;
-}
-
-/* Return non-zero value if the character at the current position in the
-   input source matches C.  */
-static bool
-match(struct lexer_t *const lexer, char unsigned const c)
-{
-    if (eof(lexer, 0) || *lexer->cur != c)
-        return false;
-    return ++lexer->cur, true;
+    if (result)
+        *result = c32;
+    return ret;
 }
 
 /* Skip any white space at the current position in the input source
    of LEXER.  */
 static void
-skip_blank(struct lexer_t *const lexer)
+skip_blank(struct lexemn const *const lexemn)
 {
-    while (is_whitespace(*lexer->cur))
-        ++lexer->cur;
+    while (is_whitespace(lexemn->p_head->cur[0]))
+    {
+        if (lexemn->p_head->cur[0] == '\n')
+        {
+            ++lexemn->p_head->line;
+            lexemn->p_head->line_start = lexemn->p_head->cur+1;
+        }
+        ++lexemn->p_head->cur;
+    }
 }
 
 /* Skip the comment sequence at the current position in the input source
    of LEXER.  */
 static void
-skip_comment(struct lexer_t *const lexer)
+skip_comment(struct lexemn const *const lexemn)
 {
-    /* This function expects the current character to be poiting at
-       the first `{' in the comment opening sequence `{{*'; this is
-       the reason why I move 3 bytes forward.   */
-    match(lexer, '{');
-    match(lexer, '{');
-    match(lexer, '*');
-
-    while (!eof(lexer, 0))
+    lexemn->p_head->cur += 2; /* Skip the comment opening.  */
+    while (lexemn->p_head->cur[0] != '\0')
     {
         /* Look for the closing `*' character.  */
-        if (peek(lexer, 0) != '*')
+        if (lexemn->p_head->cur[0] != '*')
         {
-            mov(lexer, 1);
+            if (lexemn->p_head->cur[0] == '\n')
+            {
+                ++lexemn->p_head->line;
+                lexemn->p_head->line_start = lexemn->p_head->cur+1;
+            }
+            ++lexemn->p_head->cur;
             continue;
         }
 
-        /* If found, check if it is immediately followed by the
-          sequence `}}'.  */
-        if (peek(lexer, 1) == '}' && peek(lexer, 2) == '}')
+        /* If found, check if it is immediately followed by a `/'.  */
+        if (lexemn->p_head->cur[0] == '*'
+            && lexemn->p_head->cur[1] == '/')
         {
-            /* Consume the closing comment bytes `*}}' and finish.  */
-            mov(lexer, 3);
+            /* Consume the closing comment bytes and finish.  */
+            lexemn->p_head->cur += 2;
             return;
         }
 
         /* Move one byte forward otherwise.  */
-        mov(lexer, 1);
+        ++lexemn->p_head->cur;
     }
 }
 
 /* Append TOKEN to the end of STREAM.  */
 static void
-tstream_push(struct tstream_t *const stream,
-                    struct token_t const token)
+tstream_push(struct lexemn *const lexemn,
+                    struct token const token)
 {
-    if (1 + stream->size > stream->capacity)
+    if (1 + lexemn->stream.size > lexemn->stream.capacity)
     {
-        size_t const cap = stream->capacity < 8
-                                ? 8 : 2 * stream->capacity;
-        struct token_t *buffer = realloc(stream->tokens,
-                                                cap * sizeof(struct token_t ));
+        size_t const cap = lexemn->stream.capacity < 8
+                                ? 8 : 2 * lexemn->stream.capacity;
+        struct token *buffer = realloc(lexemn->stream.tokens,
+                                                cap * sizeof(struct token ));
         if (!buffer)
         {
             perror("Fatal failure");
-            free(stream->tokens);
+            free(lexemn->stream.tokens);
             exit(EXIT_FAILURE);
         }
-        stream->tokens = buffer;
-        stream->capacity = cap;
+        lexemn->stream.tokens = buffer;
+        lexemn->stream.capacity = cap;
     }
 
-    stream->tokens[stream->size++] = token;
+    lexemn->stream.tokens[lexemn->stream.size++] = token;
 }
 
 /* Scan a string at the current position in the input source of LEXER
    and push it onto STREAM.  Escaped backslashes (`\\') and double quotes
    (`\"') are consumed as part of the token.  */
-[[nodiscard]]
-static int
-lex_string(struct lexer_t *const lexer,
-                struct tstream_t *const stream)
+static void
+lex_string(struct lexemn const *const lexemn,
+                struct token *const result)
 {
-    match(lexer, '"');  /* Skip opening `"'.  */
-    struct token_t tok = { .type = TOK_STRING };
-    tok.val.text.str = current(lexer);
+    ++lexemn->p_head->cur; /* Skip opening `"'.  */
+    result->val.text.str = lexemn->p_head->cur;
 
-    while (!eof(lexer, 0) && peek(lexer, 0) != '"')
+    while (lexemn->p_head->cur[0] != '\0'
+            && lexemn->p_head->cur[0] != '"')
     {
-        if (peek(lexer, 0) == '\\')
+        if (lexemn->p_head->cur[0] == '\0'
+            || lexemn->p_head->cur[0] == '\n')
         {
-            auto const next_ch = peek(lexer, 1);
+            error_at(lexemn, result->loc, 0,
+                "missing terminating ‘\"’ character in string literal");
+            return;
+        }
+
+        if (lexemn->p_head->cur[0] == '\\')
+        {
+            auto const next_ch = lexemn->p_head->cur[1];
             if (next_ch == '\\' || next_ch == '"')
             {
-                mov(lexer, 1);
-                ++tok.val.text.len;
+                ++lexemn->p_head->cur;
+                ++result->val.text.len;
             }
         }
-        ++tok.val.text.len;
-        mov(lexer, 1);
+        ++result->val.text.len;
+        ++lexemn->p_head->cur;
     }
 
-    if (eof(lexer, 0))
+    if (lexemn->p_head->cur[0] == '\0'
+        || lexemn->p_head->cur[0] == '\n')
     {
-        return -1; /* Syntax error: missing string closer.  */
+        error_at(lexemn, result->loc, 0,
+            "missing terminating ‘\"’ character in string literal");
+        return;
     }
 
-    match(lexer, '"'); /* Skip closing `"'.  */
-    tstream_push(stream, tok);
-    return 0;
+    ++lexemn->p_head->cur; /* Skip closing `"'.  */
 }
 
 /* Scan an identifier at the current position in the input source of LEXER
    and push it onto STREAM.  */
-[[nodiscard]]
-static int
-lex_identifier(struct lexer_t *const lexer,
-                    struct tstream_t *const stream)
+static void
+lex_identifier(struct lexemn const *const lexemn,
+                    struct token *const result)
 {
-    /* True when we have read a multibyte string.  */
-    // if (offset > 1)
-    // {
-    //     char mbs[4]   = {0};
-    //     mbstate_t st2 = {0};
-    //     size_t ret;
-    //     token_type_t type = TOK_UNKNOWN;
-    //
-    //     ret = c32rtomb(mbs, c32, &st2);
-    //
-    //     token = token_new(mbs, ret, type);
-    //     lex_tstream_add(stream, token);
-    //
-    //     current += offset;
-    //     continue;
-    // }
-
     size_t offset;
     char32_t c32;
     mbstate_t st1 = {0};
-    struct token_t tok = { .type = TOK_NAME };
-    tok.val.text.str = current(lexer);
+    result->val.text.str = lexemn->p_head->cur;
 
     /* Keep lexing the identifier.  */
     for (;;)
     {
-        offset = mbrtoc32(&c32, (char const *) current(lexer), SIZE_MAX, &st1);
-        if (!is_identifier(c32) && !isdigit(peek(lexer, 0)))
+        offset = mbrtoc32(&c32, (char const *) lexemn->p_head->cur, SIZE_MAX, &st1);
+        if (!is_identifier(c32) && !isdigit(lexemn->p_head->cur[0]))
         {
             /* Character found is not valid to be part of an identifier.  */
             break;
         }
 
-        mov(lexer, (int)offset);
-        tok.val.text.len += offset;
+        lexemn->p_head->cur += offset;
+        result->val.text.len += offset;
     }
-
-    tstream_push(stream, tok);
-    return 0;
 }
 
 /* Scan a number literal value at the current read position in the input source of
@@ -403,10 +351,9 @@ lex_identifier(struct lexer_t *const lexer,
    Likewise, in an expression such as `.0...10', the three consecutive dots are scanned
    as an ellipsis operator; however, if `.10' is intended to be a fractional number, it
    must be explicitly written as `.0..0.10'.  */
-[[nodiscard]]
-static int
-lex_number(struct lexer_t *const lexer,
-                struct tstream_t *const stream)
+static void
+lex_number(struct lexemn const *const lexemn,
+                struct token *const result)
 {
     enum : char unsigned
     {
@@ -416,7 +363,9 @@ lex_number(struct lexer_t *const lexer,
         BIN = HEX << 3
     };
     short unsigned radix  = DEC; /* Default number base.  */
-    struct token_t number = { .type = TOK_NUMBER, .val = { .text = { .str = current(lexer) } } };
+    result->val.text.str = lexemn->p_head->cur;
+    auto const start = lexemn->p_head->cur;
+    bool seen_error = false;
     static constexpr char unsigned mask[256] =
     {
         ['0'] = HEX | DEC | OCT | BIN,
@@ -448,10 +397,11 @@ lex_number(struct lexer_t *const lexer,
 #define valid_in_radix(c) \
     ( radix & mask[( c )] )
 
-    if (match(lexer, '0'))
+    if (lexemn->p_head->cur[0] == '0')
     {
-        ++number.val.text.len;
-        switch (peek(lexer, 0))
+        ++result->val.text.len;
+        ++lexemn->p_head->cur;
+        switch (lexemn->p_head->cur[0])
         {
             default: radix = DEC; break;
             case 'b': case 'B': radix = BIN; break;
@@ -461,7 +411,7 @@ lex_number(struct lexer_t *const lexer,
 
         if (radix != DEC)
         {
-            char unsigned next_ch = peek(lexer, 1);
+            char unsigned next_ch = lexemn->p_head->cur[1];
 
             /* If the character following the radix indicator is invalid according
                to these bases, tokenize the just consumed `0' as a regular decimal
@@ -472,9 +422,15 @@ lex_number(struct lexer_t *const lexer,
 
             /* If the expression entered is something like `0x.' or `0x..', instead
                of trying to guess how to interpret it, raise a syntax error.  */
-            if (radix == HEX && next_ch == '.' && !valid_in_radix(next_ch = peek(lexer, 2)))
+            if (radix == HEX && next_ch == '.'
+                && !valid_in_radix(next_ch = lexemn->p_head->cur[2]))
             {
-                return -1; /* Invalid syntax: no digits in hexadecimal floating constant.  */
+                seen_error = true;
+                error_at(lexemn, result->loc, 2,
+                            "expected digits in hexadecimal floating literal");
+                result->val.text.len += 2;
+                lexemn->p_head->cur += 2;
+                goto assmbl_number;
             }
 
             /* If the expression entered is something like `0xG' or `0x++', then just
@@ -484,8 +440,8 @@ lex_number(struct lexer_t *const lexer,
                 goto assmbl_number;
 
             /* Otherwise append the base indicator to the `0' of the non-decimal number.  */
-            ++number.val.text.len;
-            mov(lexer, 1);
+            ++result->val.text.len;
+            ++lexemn->p_head->cur;
         }
     }
 
@@ -493,49 +449,51 @@ lex_number(struct lexer_t *const lexer,
     short unsigned points = 0;    /* Count of radix points.  */
 
     /* Do scan the actual number literal.  */
-    while (!is_whitespace(peek(lexer, 0)) && !eof(lexer, 0))
+    while (!is_whitespace(lexemn->p_head->cur[0])
+            && lexemn->p_head->cur[0] != '\0')
     {
-        /* Check if range or ellipsis.  */
-        if (peek(lexer, 0) == '.' && peek(lexer, 1) == '.')
-        {
-            bool const ellipsis = peek(lexer, 2) == '.';
-            tstream_push(stream, number);
-            tstream_push(stream, (struct token_t) { .type = ellipsis ? TOK_ELLIPSIS : TOK_RANGE });
-            mov(lexer, ellipsis ? 3 : 2);
-            return 0;
-        }
+        auto const ch = lexemn->p_head->cur[0];
+        auto const ch_col = (uint32_t)(lexemn->p_head->cur - start);
 
-        auto const ch = peek(lexer, 0);
+        /* Check if range or ellipsis.  */
+        if (ch == '.' && lexemn->p_head->cur[1] == '.')
+            goto assmbl_number;
 
         /* Check if radix point.  */
         if (ch == '.')
         {
+            /* When there are multiple occurrences of a point raise a syntax error.
+               An expression such as `1.2.3' is illegal.  */
+            if (++points > 1 && !seen_error)
+            {
+                seen_error = true;
+                error_at(lexemn, result->loc, (uint32_t)result->val.text.len,
+                            "too many decimal points in numeric literal");
+            }
+
             /* This symbol separates the integer number from the fractional part.
                It is only supported in hexadecimal and decimal.  An syntax error
                is trigger if used in another abase.  */
-            if (radix != DEC && radix != HEX)
+            if (radix != DEC && radix != HEX && !seen_error)
             {
-                return -1; /* Invalid syntax: radix separator is not permitted
-                              in this base.  */
-            }
-
-            /* When there are multiple occurrences of a point raise a syntax error.
-               An expression such as `1.2.3' is illegal.  */
-            if (++points > 1)
-            {
-                return -1; /* Invalid syntax: too much points.  */
+                seen_error = true;
+                error_at(lexemn, result->loc, ch_col,
+                            "fractional notation not supported in %s literals",
+                                radix == BIN ? "binary" : "octal");
             }
 
             /* If the number is written in scientific notation, the exponent cannot
                cannot be expressed as a floating-point. An expression such as `2e1.5'
                is illegal.  */
-            if (exponents)
+            if (exponents && !seen_error)
             {
-                return -1; /* Invalid syntax: no points allowed after exponent.  */
+                seen_error = true;
+                error_at(lexemn, result->loc, ch_col,
+                    "exponent in scientific notation must be an integer");
             }
 
-            ++number.val.text.len;
-            mov(lexer, 1);
+            ++result->val.text.len;
+            ++lexemn->p_head->cur;
             continue;
         }
 
@@ -547,40 +505,42 @@ lex_number(struct lexer_t *const lexer,
                there is another occurrence of an `e' that is not a sequence, the expression
                is illegal due to ambiguities. For instance: `2e2e2', it can be interpreted
                in several ways, so the best case here is to raise a syntactic error.  */
-            if (++exponents > 1)
+            if (++exponents > 1 && !seen_error)
             {
-                return -1; /* Syntax error: too much exponent indicators in number.  */
+                seen_error = true;
+                error_at(lexemn, result->loc, ch_col,
+                    "too many exponent indicators in numeric literal");
             }
 
             /* The character after the exponent indicator.  */
-            auto const next_ch = peek(lexer, 1);
+            auto const next_ch = lexemn->p_head->cur[1];
 
             /* True when the number is express as `2e+6'.  */
             bool const has_sign = next_ch == '+' || next_ch == '-';
 
             /* Select the first digit of the exponent to later ascertain it is a valid
                base-10 number.  */
-            auto const digit_ch = has_sign ? peek(lexer, 2) : next_ch;
+            auto const digit_ch = has_sign ? lexemn->p_head->cur[2] : next_ch;
 
             if (!(DEC & mask[digit_ch]))
                 goto assmbl_number;
 
             if (has_sign)
             {
-                ++number.val.text.len; /* Consume the `+' or `-'.  */
-                mov(lexer, 1);
+                ++result->val.text.len; /* Consume the `+' or `-'.  */
+                ++lexemn->p_head->cur;
             }
 
             /* Consume the exponent indicator.  */
-            ++number.val.text.len;
-            mov(lexer, 1);
+            ++result->val.text.len;
+            ++lexemn->p_head->cur;
             continue;
         }
 
         /* Check if thousand separator.  */
         if (ch == '_')
         {
-            auto const next = peek(lexer, 1);
+            auto const next = lexemn->p_head->cur[1];
             /* If the character following the thousand  separator is not a valid digit
                in the current  number's base, scan the number and let the lexer decide
                what do next.  For example, if entered, `1_000_a', the ending `_a' must
@@ -590,8 +550,8 @@ lex_number(struct lexer_t *const lexer,
             if (!valid_in_radix(next))
                 goto assmbl_number;
 
-            ++number.val.text.len;
-            mov(lexer, 1);
+            ++result->val.text.len;
+            ++lexemn->p_head->cur;
             continue;
         }
 
@@ -602,21 +562,25 @@ lex_number(struct lexer_t *const lexer,
         {
             /* If a digit is found so far, then the number was expressed incorrectly
                and a syntax error must be raised.  For instance the `2' in `0b01012'.  */
-            if (isdigit(ch))
+            if (isdigit(ch) && !seen_error)
             {
-                return -1; /* Invalid syntax: digit cannot be part of current base.  */
+                error_at(lexemn, result->loc, ch_col,
+                    "invalid digit ‘%c’ in %s literal",
+                        ch, radix == BIN ? "binary" :
+                                radix == OCT ? "octal" :
+                                    radix == HEX ? "hexadecimal" : "decimal");
             }
 
             break;
         }
 
-        ++number.val.text.len;
-        mov(lexer, 1);
+        ++result->val.text.len;
+        ++lexemn->p_head->cur;
     }
 
 assmbl_number:
-    tstream_push(stream, number);
-    return 0;
+    if (seen_error)
+        result->type = TOK_UNK;
 }
 
 /* Scan a  meta-command and  its arguments  (if any) and push them onto
@@ -640,87 +604,94 @@ assmbl_number:
              ,---> T_CMD            ,---> T_CMDARG         ,---> T_CMDARG
         \exec  -f "/path/to/file.lxm" -f /path/to/file2.lxm
                 `---> T_CMDARG         `---> T_CMDARG       */
-static int
-lex_cmd(struct lexer_t *const lexer,
-            struct tstream_t *const stream)
+static void
+lex_cmd(struct lexemn *const lexemn, struct token *const cmd)
 {
-    if (eof(lexer, 1) || is_whitespace(peek(lexer, 1)))
-    {
-        // error = true; /* unknown command  */
-        return -1;
-    }
+    lexemn->lex_stat.in_cmd = true;
+    lexemn->lex_stat.run_cmd = true;
 
     /* Parse command name.  */
 
-    struct token_t cmd = { .type = TOK_CMD };
-    cmd.val.text.str = current(lexer);
-    match(lexer, '\\');
-    ++cmd.val.text.len;
+    cmd->type = TOK_CMD;
+    cmd->val.text.str = lexemn->p_head->cur;
+    ++lexemn->p_head->cur; /* Skip the `\'. */
+    ++cmd->val.text.len;
 
-    while (!is_whitespace(peek(lexer, 0)) && !eof(lexer, 0))
+    if (lexemn->p_head->cur[0] == '\0'
+        || is_whitespace(lexemn->p_head->cur[0]))
     {
-        mov(lexer, 1);
-        ++cmd.val.text.len;
+        cmd->type = TOK_UNK;
+        lexemn->lex_stat.run_cmd = false;
+        error_at(lexemn, cmd->loc, 0,
+            "ill-formed meta-command; did you miss the name?");
     }
 
-    tstream_push(stream, cmd);
+    while (!is_whitespace(lexemn->p_head->cur[0])
+            && lexemn->p_head->cur[0] != '\0')
+    {
+        ++lexemn->p_head->cur;
+        ++cmd->val.text.len;
+    }
+
+    tstream_push(lexemn, *cmd);
 
     /* Parse command arguments (if any).  */
 
     /* Skip any white space in is between the command arguments.  */
-    while (is_whitespace(peek(lexer, 0)))
-        mov(lexer, 1);
+    while (is_whitespace(lexemn->p_head->cur[0]))
+        ++lexemn->p_head->cur;
 
     /* If end of string, then we exit.  */
-    if (eof(lexer, 0))
-        return 0;
+    if (lexemn->p_head->cur[0] == '\0')
+        return;
 
     /* As long as we are not at the end of the string,
       then we are free to scan arguments.  */
-    while (!eof(lexer, 0))
+    while (lexemn->p_head->cur[0] != '\0')
     {
         /* These arguments are expected to be separated by white spaces,
            so if any is found,  we must skip it until we find a parsable
            token.  */
-        while (is_whitespace(peek(lexer, 0)))
-            mov(lexer, 1);
+        while (is_whitespace(lexemn->p_head->cur[0]))
+            ++lexemn->p_head->cur;
 
-        struct token_t arg = { .type = TOK_CMD_ARG };
-        arg.val.text.str = current(lexer);
+        struct token arg = { .type = cmd->type == TOK_UNK ? TOK_UNK : TOK_CMD_ARG };
+        arg.val.text.str = lexemn->p_head->cur;
 
         /* Check if current pointer is the beginning of a string; in such case,
            then we need to parse the remaining values as the are until finding
            the closing string character. */
-        if (match(lexer, '"') || match(lexer, '\''))
+        if (lexemn->p_head->cur[0] == '"' || lexemn->p_head->cur[0] == '\'')
         {
+            ++lexemn->p_head->cur;
             ++arg.val.text.len;
-            while (!eof(lexer, 0) && peek(lexer, 0) != '"' && peek(lexer, 0) != '\'')
+            while (lexemn->p_head->cur[0] != '\0'
+                && lexemn->p_head->cur[0] != '"'
+                && lexemn->p_head->cur[0] != '\'')
             {
-                mov(lexer, 1);
+                ++lexemn->p_head->cur;
                 ++arg.val.text.len;
             }
 
-            mov(lexer, 1);
+            ++lexemn->p_head->cur;
             ++arg.val.text.len;
-            tstream_push(stream, arg);
+            tstream_push(lexemn, arg);
             continue;
         }
 
         /* If end of string, then we exit.  */
-        if (eof(lexer, 0))
+        if (lexemn->p_head->cur[0] == '\0')
             continue;
 
         /* At this point we have found a valid argument.  */
-        while (!is_whitespace(peek(lexer, 0)) && !eof(lexer, 0))
+        while (!is_whitespace(lexemn->p_head->cur[0]) && lexemn->p_head->cur[0] != '\0')
         {
-            mov(lexer, 1);
+            ++lexemn->p_head->cur;
             ++arg.val.text.len;
         }
 
-        tstream_push(stream, arg);
+        tstream_push(lexemn, arg);
     }
-
-    return 0;
 }
 
 /* Scan a constant object and push it onto STREAM.  Constant values start
@@ -740,311 +711,367 @@ lex_cmd(struct lexer_t *const lexer,
         $2_SQRTPI    1.12837916709551257390    {{* 2/sqrt(pi) *}}
         $SQRT2       1.41421356237309504880    {{* sqrt(2)    *}}
         $SQRT1_2     0.70710678118654752440    {{* 1/sqrt(2)  *}}  */
-static int
-lex_const(struct lexer_t *const lexer,
-                struct tstream_t *const stream)
+static void
+lex_const(struct lexemn const *const lexemn,
+                struct token *const result)
 {
-    /* Check if the next byte after `$' is a valid character.
+    result->val.text.str = lexemn->p_head->cur;
+    ++lexemn->p_head->cur; /* Skip the `$'.  */
+    ++result->val.text.len;
+
+    /* Check if the next character after `$' is a valid identifier.
        It should be any of [0-9a-zA-Z_], otherwise the constant
        is ill-formed.  */
-    if (eof(lexer, 1) || (!isalnum(peek(lexer, 1)) && peek(lexer, 1) != '_'))
+    if (lexemn->p_head->cur[0] == '\0'
+        || (!isalnum(lexemn->p_head->cur[0])
+            && lexemn->p_head->cur[0] != '_'))
     {
-        // error = true; /* malformed constant  */
-        return -1;
+        error_at(lexemn, result->loc, 0,
+            "ill-formed constant; did you miss the name?");
+        result->type = TOK_UNK;
+        return;
     }
 
-    struct token_t tok = { .type = TOK_CONST };
-    tok.val.text.str = current(lexer);
-    ++tok.val.text.len;
-    match(lexer, '$');
-
-    while (isalnum(peek(lexer, 0)) || peek(lexer, 0) == '_')
+    while (isalnum(lexemn->p_head->cur[0]) || lexemn->p_head->cur[0] == '_')
     {
-        mov(lexer, 1);
-        ++tok.val.text.len;
+        ++lexemn->p_head->cur;
+        ++result->val.text.len;
     }
+}
 
-    tstream_push(stream, tok);
-    return 0;
+static void
+emit_stray_token(struct lexemn const * const lexemn,
+                    struct token const *const t)
+{
+    error_at(lexemn, t->loc, 0, "stray symbol detected in program");
+}
+
+static void
+lex_next_token(struct lexemn *const lexemn,
+                    struct token *const result)
+{
+fresh_line:
+    char unsigned const ch = lexemn->p_head->cur[0];
+    uint32_t const file = (uint32_t)(lexemn->p_head - lexemn->p_vec);
+    uint32_t const line = lexemn->p_head->line;
+    uint32_t const column = 1 + (uint32_t)(lexemn->p_head->cur - lexemn->p_head->line_start);
+    result->loc = loc_make(file, line, column);
+    switch (ch)
+    {
+        case '\0':
+            result->type = (enum token_type)-1;
+            break;
+        case ' ': case '\t': case '\n':
+        case '\r': case '\v': case '\f':
+            skip_blank(lexemn);
+            goto fresh_line;
+        case '0': case '1': case '2': case '3': case '4':
+        case '5': case '6': case '7': case '8': case '9':
+            result->type = TOK_NUMBER;
+            lex_number(lexemn, result);
+            break;
+        case '_':
+        case 'a': case 'b': case 'c': case 'd': case 'e':
+        case 'f': case 'g': case 'h': case 'i': case 'j':
+        case 'k': case 'l': case 'm': case 'n': case 'o':
+        case 'p': case 'q': case 'r': case 's': case 't':
+        case 'u': case 'v': case 'w': case 'x': case 'y':
+        case 'z':
+        case 'A': case 'B': case 'C': case 'D': case 'E':
+        case 'F': case 'G': case 'H': case 'I': case 'J':
+        case 'K': case 'L': case 'M': case 'N': case 'O':
+        case 'P': case 'Q': case 'R': case 'S': case 'T':
+        case 'U': case 'V': case 'W': case 'X': case 'Y':
+        case 'Z':
+            result->type = TOK_NAME;
+            lex_identifier(lexemn, result);
+            break;
+        case '"':
+            result->type = TOK_STRING;
+            lex_string(lexemn, result);
+            break;
+        case '\\':
+            result->type = TOK_UNK;
+            if (lexemn->lex_stat.is_shell)
+            {
+                lex_cmd(lexemn, result);
+                result->type = (enum token_type)-1;
+                return;
+            }
+            emit_stray_token(lexemn, result);
+            ++lexemn->p_head->cur;
+            break;
+        case '$':
+            result->type = TOK_CONST;
+            lex_const(lexemn, result);
+            return;
+        case '/':
+            if (lexemn->p_head->cur[1] == '*')
+            {
+                skip_comment(lexemn);
+                goto fresh_line;
+            }
+            result->type = TOK_DIV_1;
+            ++lexemn->p_head->cur;
+            break;
+        case '+':
+            result->type = TOK_PLUS;
+            if (lexemn->p_head->cur[1] == '+')
+            {
+                char32_t ch1, ch2;
+                (void)peek_utf32(lexemn, -1, &ch1);
+                (void)peek_utf32(lexemn, 2, &ch2);
+                if (is_identifier(ch1) || is_identifier(ch2))
+                {
+                    result->type = TOK_INC;
+                    ++lexemn->p_head->cur;
+                }
+            }
+            ++lexemn->p_head->cur;
+            break;
+        case '-':
+            result->type = TOK_MINUS;
+            if (lexemn->p_head->cur[1] == '-')
+            {
+                char32_t ch1, ch2;
+                (void)peek_utf32(lexemn, -1, &ch1);
+                (void)peek_utf32(lexemn, 2, &ch2);
+                if (is_identifier(ch1) || is_identifier(ch2))
+                {
+                    result->type = TOK_DEC;
+                    ++lexemn->p_head->cur;
+                }
+            }
+            ++lexemn->p_head->cur;
+            break;
+        case '.':
+            char unsigned next = lexemn->p_head->cur[1];
+            if (next == '.')
+            {
+                next = lexemn->p_head->cur[2];
+                if (next == '.')
+                {
+                    result->type = TOK_ELLIPSIS;
+                    lexemn->p_head->cur += 3;
+                    break;
+                }
+                result->type = TOK_RANGE;
+                lexemn->p_head->cur += 2;
+                break;
+            }
+            if (next == '0' || next == '1' || next == '2' ||
+                next == '3' || next == '4' || next == '5' ||
+                next == '6' || next == '7' || next == '8' ||
+                next == '9')
+            {
+                result->type = TOK_NUMBER;
+                lex_number(lexemn, result);
+                break;
+            }
+            result->type = TOK_DOT;
+            ++lexemn->p_head->cur;
+            break;
+        case '&':
+            result->type = TOK_AND;
+            if (lexemn->p_head->cur[1] == '&')
+            {
+                result->type = TOK_AND_AND;
+                ++lexemn->p_head->cur;
+            }
+            ++lexemn->p_head->cur;
+            break;
+        case '|':
+            result->type = TOK_OR;
+            if (lexemn->p_head->cur[1] == '|')
+            {
+                result->type = TOK_OR_OR;
+                ++lexemn->p_head->cur;
+            }
+            ++lexemn->p_head->cur;
+            break;
+        case '*':
+            result->type = TOK_MULT;
+            if (lexemn->p_head->cur[1] == '*')
+            {
+                result->type = TOK_EXP;
+                ++lexemn->p_head->cur;
+            }
+            ++lexemn->p_head->cur;
+            break;
+        case ':':
+            result->type = TOK_COLON;
+            if (lexemn->p_head->cur[1] == '=')
+            {
+                result->type = TOK_ASSIGN;
+                ++lexemn->p_head->cur;
+            }
+            ++lexemn->p_head->cur;
+            break;
+        case '!':
+            result->type = TOK_NOT;
+            if (lexemn->p_head->cur[1] == '=')
+            {
+                result->type = TOK_NEQ_1;
+                ++lexemn->p_head->cur;
+            }
+            ++lexemn->p_head->cur;
+            break;
+        case '<':
+            result->type = TOK_LT;
+            if (lexemn->p_head->cur[1] == '=')
+            {
+                result->type = TOK_LTE;
+                ++lexemn->p_head->cur;
+            }
+            else if (lexemn->p_head->cur[1] == '>')
+            {
+                result->type = TOK_NEQ_2;
+                ++lexemn->p_head->cur;
+            }
+            else if (lexemn->p_head->cur[1] == '<')
+            {
+                result->type = TOK_LSHIFT;
+                ++lexemn->p_head->cur;
+            }
+            ++lexemn->p_head->cur;
+            break;
+        case '>':
+            result->type = TOK_GT;
+            if (lexemn->p_head->cur[1] == '=')
+            {
+                result->type = TOK_GTE;
+                ++lexemn->p_head->cur;
+            }
+            else if (lexemn->p_head->cur[1] == '>')
+            {
+                result->type = TOK_RSHIFT;
+                ++lexemn->p_head->cur;
+            }
+            ++lexemn->p_head->cur;
+            break;
+        case '(':
+            result->type = TOK_LPAREN;
+            ++lexemn->p_head->cur;
+            break;
+        case ')':
+            result->type = TOK_RPAREN;
+            ++lexemn->p_head->cur;
+            break;
+        case '[':
+            result->type = TOK_LBRACKET;
+            ++lexemn->p_head->cur;
+            break;
+        case ']':
+            result->type = TOK_RBRACKET;
+            ++lexemn->p_head->cur;
+            break;
+        case '{':
+            result->type = TOK_LBRACE;
+            ++lexemn->p_head->cur;
+            break;
+        case '}':
+            result->type = TOK_RBRACE;
+            ++lexemn->p_head->cur;
+            break;
+        case ',':
+            result->type = TOK_COMMA;
+            ++lexemn->p_head->cur;
+            break;
+        case ';':
+            result->type = TOK_SEMICOLON;
+            ++lexemn->p_head->cur;
+            break;
+        case '=':
+            result->type = TOK_EQ;
+            ++lexemn->p_head->cur;
+            break;
+        case '?':
+            result->type = TOK_QMARK;
+            ++lexemn->p_head->cur;
+            break;
+        case '%':
+            result->type = TOK_MOD;
+            ++lexemn->p_head->cur;
+            break;
+        case '#':
+            result->type = TOK_HASH;
+            ++lexemn->p_head->cur;
+            break;
+        case '@':
+            result->type = TOK_ATSIGN;
+            ++lexemn->p_head->cur;
+            break;
+        case '~':
+            result->type = TOK_COMPL;
+            ++lexemn->p_head->cur;
+            break;
+        case '^':
+            result->type = TOK_XOR;
+            ++lexemn->p_head->cur;
+            break;
+        default:
+            result->type = TOK_UNK;
+            if (ch > 0x80)
+            {
+                char32_t ch32;
+                size_t const off = peek_utf32(lexemn, 0, &ch32);
+                switch (ch32)
+                {
+                    default: break;
+                    case 0x000000F7: result->type = TOK_DIV_2; break;
+                    case 0x0000230A: result->type = TOK_LFLOOR; break;
+                    case 0x0000230B: result->type = TOK_RFLOOR; break;
+                    case 0x00002308: result->type = TOK_LCEILING; break;
+                    case 0x00002309: result->type = TOK_RCEILING; break;
+                    case 0x00002229: result->type = TOK_SET_INTER; break;  /* Set operators coming below.  */
+                    case 0x0000222A: result->type = TOK_SET_UNION; break;
+                    case 0x00002286: result->type = TOK_SET_SUB; break;
+                    case 0x00002284: result->type = TOK_SET_NSUB; break;
+                    case 0x00002282: result->type = TOK_SET_PROPSUB; break;
+                    case 0x00002287: result->type = TOK_SET_SUPER; break;
+                    case 0x00002285: result->type = TOK_SET_NSUPER; break;
+                    case 0x00002283: result->type = TOK_SET_PROPSUPER; break;
+                    case 0x00002206: result->type = TOK_SET_SYMMDIFF; break;
+                    case 0x00002208: result->type = TOK_SET_ELEMOF; break;
+                    case 0x00002209: result->type = TOK_SET_NELEMOF; break;
+                    case 0x000000D7: result->type = TOK_SET_CARTPROD; break;
+                }
+
+                if (is_identifier(ch32))
+                {
+                    result->type = TOK_NAME;
+                    lex_identifier(lexemn, result);
+                    break;
+                }
+
+                lexemn->p_head->cur += off;
+            }
+            else
+            {
+                emit_stray_token(lexemn, result);
+                ++lexemn->p_head->cur;
+            }
+    }
 }
 
 void
-lex_start(struct lexer_t *const lexer,
-                struct tstream_t *stream)
+lex_start(struct lexemn *const lexemn)
 {
-    /* A boolean flag indicating that the lexing went wrong.  */
-    bool error = false;
-    (void)error;
-
-    /* State dumb variable for repeated calls to `mbrtoc32'.  */
-    mbstate_t st1 = {0};
-
-    /* Start scanning input.  */
-    while (!eof(lexer, 0))
+    for (size_t file_idx = 0; file_idx < lexemn->p_size; ++file_idx)
     {
-        /* Skip any white space before the next token, if any.  */
-        skip_blank(lexer);
-
-        /* Exit execution flow if pointer is at end of file.  */
-        if (eof(lexer, 0))
-            break;
-
-        /* Reset memory for the next token to be scanned and parsed.  */
-        // lxm_reset(lexer);
-
-        /* Amount of read bytes from the multibyte string.
-           Its value will be added at the end of each
-           iteration to jump exactly the read bytes.  */
-        size_t offset;
-
-        /* Wide byte representation of the current character
-           being parsed; used only to get the code point and
-           to save the correct lexeme.  */
-        char32_t c32;
-
-        /* Extract the next multibyte character from the
-           string.  As the size of the input string is and
-           should remain unknown, SIZE_MAX indicates `mbrtoc32'
-           read as much as it can.  Offset should be set to be
-           the amount of bytes read; when its value is more than
-           one, we have consumed a multibyte character.  */
-        offset = mbrtoc32(&c32, (char const *) current(lexer), SIZE_MAX, &st1);
-
-        /* Invalid input.  */
-        if (offset == (size_t) -1)
+        off_t off = 0;
+        lexemn->p_head = lexemn->p_vec + file_idx;
+        while ((lexemn->lex_stat.is_shell && *lexemn->p_head->cur != '\0')
+            || (lexemn->lex_stat.is_fs && off < lexemn->p_head->file.st.st_size))
         {
-            error = true;
-            break;
+            struct token token = { 0 };
+            lex_next_token(lexemn, &token);
+            if (token.type != (enum token_type)-1)
+                tstream_push(lexemn, token);
+            if (lexemn->lex_stat.is_fs)
+                off = lexemn->p_head->cur - lexemn->p_head->buf;
         }
-
-        /* Truncated input.  */
-        if (offset == (size_t) -2)
-        {
-            error = true;
-            break;
-        }
-
-        // if (offset < 0)
-        // {
-        //     // catch EILSEQ
-        // }
-
-#ifndef ch32_case
-#define ch32_case(c32, typ) \
-    case c32: \
-    { \
-        tstream_push(stream, (struct token_t) { .type = typ }); \
-        mov(lexer, (int)offset); \
-        continue; \
-    }
-#endif
-
-        switch (c32)
-        {
-            default: break;
-            ch32_case(0x000000F7, TOK_DIV_2)
-            ch32_case(0x0000230A, TOK_LFLOOR)
-            ch32_case(0x0000230B, TOK_RFLOOR)
-            ch32_case(0x00002308, TOK_LCEILING)
-            ch32_case(0x00002309, TOK_RCEILING)
-            ch32_case(0x00002229, TOK_SET_INTER)  /* Set operators coming below.  */
-            ch32_case(0x0000222A, TOK_SET_UNION)
-            ch32_case(0x00002286, TOK_SET_SUB)
-            ch32_case(0x00002284, TOK_SET_NSUB)
-            ch32_case(0x00002282, TOK_SET_PROPSUB)
-            ch32_case(0x00002287, TOK_SET_SUPER)
-            ch32_case(0x00002285, TOK_SET_NSUPER)
-            ch32_case(0x00002283, TOK_SET_PROPSUPER)
-            ch32_case(0x00002206, TOK_SET_SYMMDIFF)
-            ch32_case(0x00002208, TOK_SET_ELEMOF)
-            ch32_case(0x00002209, TOK_SET_NELEMOF)
-            ch32_case(0x000000D7, TOK_SET_CARTPROD)
-            ch32_case(0x000000D8, TOK_SET_EMPTY)
-        }
-
-        /* Lex and identifier.  */
-        if (is_identifier(c32))
-        {
-            (void)lex_identifier(lexer, stream);
-            continue;
-        }
-
-        /* Skip a comment block.  */
-        if (peek(lexer, 0) == '{' && peek(lexer, 1) == '{' && peek(lexer, 2) == '*')
-        {
-            skip_comment(lexer);
-            continue;
-        }
-
-        /* Lex a string.  */
-        if (peek(lexer, 0) == '"')
-        {
-            (void)lex_string(lexer, stream);
-            continue;
-        }
-
-        /* Lex a number.  */
-        if (isdigit(peek(lexer, 0)) || peek(lexer, 0) == '.')
-        {
-            /* Range and ellipsis check.  */
-            if (peek(lexer, 0) == '.' && peek(lexer, 1) == '.')
-            {
-                bool const ellipsis = peek(lexer, 2) == '.';
-                tstream_push(stream, (struct token_t) { .type = ellipsis ? TOK_ELLIPSIS : TOK_RANGE });
-                mov(lexer, ellipsis ? 3 : 2);
-                continue;
-            }
-
-            /* Dot operator check.  */
-            if (peek(lexer, 0) == '.' && !isdigit(peek(lexer, 1)))
-            {
-                tstream_push(stream, (struct token_t) { .type = TOK_DOT });
-                mov(lexer, 1);
-                continue;
-            }
-
-            (void)lex_number(lexer, stream);
-            continue;
-        }
-
-        /* Set the default type of the next token to be scanned.  */
-        enum token_type type = TOK_UNK;
-
-#ifndef ch8_case1
-#define ch8_case1(ch, typ) \
-    case ch: \
-    { \
-        type = typ; \
-        break; \
-    }
-#endif
-
-#ifndef ch8_case2
-#define ch8_case2(ch1, type1, ch2, type2) \
-    case ch1: \
-    { \
-        type = type1; \
-        if (!eof(lexer, 1) && peek(lexer, 1) == ch2) \
-        { \
-            type = type2; \
-            mov(lexer, 1); \
-        } \
-        break; \
-    }
-#endif
-
-#ifndef ch8_case3
-#define ch8_case3(ch1, type1, ch2, type2, ch3, type3) \
-    case ch1: \
-    { \
-        type = type1; \
-        if (!eof(lexer, 1)) \
-        { \
-            if (peek(lexer, 1) == ch2) \
-            { \
-                type  = type2; \
-                mov(lexer, 1); \
-            } \
-            else if (peek(lexer, 1) == ch3) \
-            { \
-                type  = type3; \
-                mov(lexer, 1); \
-            } \
-        } \
-        break; \
-    }
-#endif
-
-#ifndef ch8_case4
-#define ch8_case4(ch1, type1, ch2, type2, ch3, type3, ch4, type4) \
-    case ch1: \
-    { \
-        type = type1; \
-        if (!eof(lexer, 1)) \
-        { \
-            if (peek(lexer, 1) == ch2) \
-            { \
-                type  = type2; \
-                mov(lexer, 1); \
-            } \
-            else if (peek(lexer, 1) == ch3) \
-            { \
-                type  = type3; \
-                mov(lexer, 1); \
-            } \
-            else if (peek(lexer, 1) == ch4) \
-            { \
-                type  = type4; \
-                mov(lexer, 1); \
-            } \
-        } \
-        break; \
-    }
-#endif
-
-        switch (peek(lexer, 0))
-        {
-            default  :  break;
-            case '$' :  lex_const(lexer, stream); continue;
-            case '\\':  lex_cmd(lexer, stream);   continue;
-            case '+':
-            {
-                type = TOK_PLUS;
-                if (peek(lexer, 1) == '+')
-                {
-                    if (is_identifier(peek_utf32(lexer, -1))
-                        || is_identifier(peek_utf32(lexer, 2)))
-                    {
-                        type = TOK_INC;
-                        mov(lexer, 1);
-                    }
-                }
-
-                break;
-            }
-            case '-':
-            {
-                type = TOK_MINUS;
-                if (peek(lexer, 1) == '-')
-                {
-                    if (is_identifier(peek_utf32(lexer, -1))
-                        || is_identifier(peek_utf32(lexer, 2)))
-                    {
-                        type = TOK_DEC;
-                        mov(lexer, 1);
-                    }
-                }
-
-                break;
-            }
-            ch8_case1('(', TOK_LPAREN)
-            ch8_case1(')', TOK_RPAREN)
-            ch8_case1('[', TOK_LBRACKET)
-            ch8_case1(']', TOK_RBRACKET)
-            ch8_case1('{', TOK_LBRACE)
-            ch8_case1('}', TOK_RBRACE)
-            ch8_case1(',', TOK_COMMA)
-            ch8_case1(';', TOK_SEMICOLON)
-            ch8_case1('=', TOK_EQ)
-            ch8_case1('?', TOK_QMARK)
-            ch8_case1('%', TOK_MOD)
-            ch8_case1('#', TOK_HASH)
-            ch8_case1('@', TOK_ATSIGN)
-            ch8_case1('~', TOK_COMPL)
-            ch8_case1('^', TOK_XOR)
-            ch8_case1('/', TOK_DIV_1)
-            ch8_case2('&', TOK_AND,   '&', TOK_AND_AND)
-            ch8_case2('|', TOK_OR,    '|', TOK_OR_OR)
-            ch8_case2('*', TOK_MULT,  '*', TOK_EXP)
-            ch8_case2(':', TOK_COLON, '=', TOK_ASSIGN)
-            ch8_case2('!', TOK_NOT,   '=', TOK_NEQ_1)
-            ch8_case3('>', TOK_GT,    '=', TOK_GTE,   '>', TOK_RSHIFT)
-            ch8_case4('<', TOK_LT,    '>', TOK_NEQ_2, '=', TOK_LTE, '<', TOK_LSHIFT)
-        }
-
-        tstream_push(stream, (struct token_t) { .type = type });
-        mov(lexer, 1);
     }
 
-    tstream_push(stream, (struct token_t) { .type = TOK_END });
+    tstream_push(lexemn, (struct token){ .type = TOK_END });
 }

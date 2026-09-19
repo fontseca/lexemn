@@ -23,7 +23,7 @@
 #ifndef TOK_LEXER_H
 #define TOK_LEXER_H
 
-#include <stddef.h>
+#include "loc.h"
 
 # ifndef TOK_TYPES_TABLE
 #  define TOK_TYPES_TABLE               \
@@ -92,7 +92,6 @@
     OP(SET_ELEMOF,               "∈")   \
     OP(SET_NELEMOF,              "∉")   \
     OP(SET_CARTPROD,             "×")   \
-    OP(SET_EMPTY,                "Ø")   \
                                         \
     /* Miscellaneous.  */               \
                                         \
@@ -135,9 +134,10 @@ struct identifier  /* FIXME: Convert into symbol table entry.  */
 };
 
 /* An individual lexical token scanned from source code.  */
-struct token_t
+struct token
 {
     enum token_type type;
+    loc_t            loc;
     union
     {
         struct identifier *node; /* An identifier in the symbol table.  */
@@ -158,32 +158,8 @@ struct tstream_t
     /* Next size when reallocating memory.  */
     size_t capacity;
 
-    /* Underlying stream scanned tokens.  */
-    struct token_t *tokens;
+    /* Underlying stream of scanned tokens.  */
+    struct token *tokens;
 };
-
-/* Lexical analyzer that transforms a raw source string into a sequential stream of
-   tokens (see `struct tstream_t').  Operates purely on syntax at character level,
-   flags unrecognized symbols or malformed literals, but performs no grammatical
-   or semantic validation.   */
-struct lexer_t
-{
-    /* Start of the source buffer.   */
-    char unsigned const *buf;
-
-    /* Current read position in `buf'.  */
-    char unsigned const *cur;
-};
-
-/* Configure LEXER to scan input source WHENCE. */
-void
-lex_setup(struct lexer_t *lexer,
-                char unsigned const *whence);
-
-/* Start scanning LEXER and append all generated tokens to the token
-   stream STREAM.  */
-void
-lex_start(struct lexer_t *lexer,
-                struct tstream_t *stream);
 
 #endif //TOK_LEXER_H

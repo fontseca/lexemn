@@ -168,7 +168,7 @@ CASE("0o0 0o755 0O777 0o123_456 0o1_2_3_4_5_6_7 0o 0 0o+1 0oo 3o 2oo 0o1 2o8 0o_
 
 CASE(R"("" "     " "This is a string." "This is an \"escaped\" string."
      "Line 1\nLine 2\nLine3\tTab" "\\\\" "           pad           "
-     " {{* comment *}} " "if (x == \"🍌水你好\") { return 0; }"
+     " /* comment */ " "if (x == \"🍌水你好\") { return 0; }"
      "\x41\x42\x43"
      let const char *str := "Lorem ipsum dolor sit amet." and "4x^2 + 5 = 13"
      "\"" "\\" "\\\"" "\\\\" "\\\\\"" " \ " "''")",
@@ -179,7 +179,7 @@ CASE(R"("" "     " "This is a string." "This is an \"escaped\" string."
      { TOK_STRING, "Line 1\\nLine 2\\nLine3\\tTab" },
      { TOK_STRING, "\\\\\\\\" },
      { TOK_STRING, "           pad           " },
-     { TOK_STRING, " {{* comment *}} " },
+     { TOK_STRING, " /* comment */ " },
      { TOK_STRING, "if (x == \\\"🍌水你好\\\") { return 0; }" },
      { TOK_STRING, "\\x41\\x42\\x43" },
      { TOK_NAME, "let" },
@@ -361,7 +361,7 @@ CASE("( ) [ ] { } ⌊ ⌋ ⌈ ⌉ ⌊x⌋ + ⌈y⌉",
 
 /* Set operators.  */
 
-CASE("∩ ∪ ⊆ ⊄ ⊂ ⊇ ⊅ ⊃ ∆ ∈ ∉ × Ø",
+CASE("∩ ∪ ⊆ ⊄ ⊂ ⊇ ⊅ ⊃ ∆ ∈ ∉ ×",
      { TOK_SET_INTER },
      { TOK_SET_UNION },
      { TOK_SET_SUB },
@@ -373,10 +373,9 @@ CASE("∩ ∪ ⊆ ⊄ ⊂ ⊇ ⊅ ⊃ ∆ ∈ ∉ × Ø",
      { TOK_SET_SYMMDIFF },
      { TOK_SET_ELEMOF },
      { TOK_SET_NELEMOF },
-     { TOK_SET_CARTPROD },
-     { TOK_SET_EMPTY }),
+     { TOK_SET_CARTPROD }),
 
-CASE("{A} ∩ {B} {A} ∪ {B} {A} ⊆ {B} {A} ⊄ {B} {A} ⊂ {B} {A} ⊇ {B} {A} ⊅ {B} {A} ⊃ {B} {A} ∆ {B} x ∈ {A} x ∉ {A} {A} × {B} A = Ø",
+CASE("{A} ∩ {B} {A} ∪ {B} {A} ⊆ {B} {A} ⊄ {B} {A} ⊂ {B} {A} ⊇ {B} {A} ⊅ {B} {A} ⊃ {B} {A} ∆ {B} x ∈ {A} x ∉ {A} {A} × {B}",
      { TOK_LBRACE },
      { TOK_NAME, "A" },
      { TOK_RBRACE },
@@ -456,12 +455,9 @@ CASE("{A} ∩ {B} {A} ∪ {B} {A} ⊆ {B} {A} ⊄ {B} {A} ⊂ {B} {A} ⊇ {B} {A
      { TOK_SET_CARTPROD },
      { TOK_LBRACE },
      { TOK_NAME, "B" },
-     { TOK_RBRACE },
-     { TOK_NAME, "A" },
-     { TOK_EQ },
-     { TOK_SET_EMPTY }),
+     { TOK_RBRACE }),
 
-CASE("A∩B∪C⊆D⊄E⊂F⊇G⊅H⊃I∆J∈K∉L×M=Ø",
+CASE("A∩B∪C⊆D⊄E⊂F⊇G⊅H⊃I∆J∈K∉L",
      { TOK_NAME, "A" },
      { TOK_SET_INTER },
      { TOK_NAME, "B" },
@@ -484,11 +480,7 @@ CASE("A∩B∪C⊆D⊄E⊂F⊇G⊅H⊃I∆J∈K∉L×M=Ø",
      { TOK_SET_ELEMOF },
      { TOK_NAME, "K" },
      { TOK_SET_NELEMOF },
-     { TOK_NAME, "L" },
-     { TOK_SET_CARTPROD },
-     { TOK_NAME, "M" },
-     { TOK_EQ },
-     { TOK_SET_EMPTY }),
+     { TOK_NAME, "L" }),
 
 /* Miscellaneous operators.  */
 
@@ -596,7 +588,7 @@ CASE("\n\n\n\t\t\t________y25.123456789\n\n\n\n\t\t\v2026.6*18.9+xyz__1__2   -1z
      { TOK_NUMBER, "1" },
      { TOK_NAME, "z2" }),
 
-CASE("\n___var23 +\r\r\n\t\v\f2.25____ x {{* \ncomment \n\n\n\n\ngets ignored *}}2y*3+.256545845454848416165156165188888885465144164848115415878445548629461411654515o\n",
+CASE("\n___var23 +\r\r\n\t\v\f2.25____ x /* \ncomment \n\n\n\n\ngets ignored */2y*3+.256545845454848416165156165188888885465144164848115415878445548629461411654515o\n",
      { TOK_NAME, "___var23" },
      { TOK_PLUS },
      { TOK_NUMBER, "2.25" },
@@ -614,7 +606,7 @@ CASE("\n___var23 +\r\r\n\t\v\f2.25____ x {{* \ncomment \n\n\n\n\ngets ignored *}
                    "629461411654515" },
      { TOK_NAME, "o" }),
 
-CASE("0000007\r\r\n\t\v\f0.500\n\n\t\n\n\n\t42..999foo{{* a *}}bar{{**}}\r\r\n\t\v\f",
+CASE("0000007\r\r\n\t\v\f0.500\n\n\t\n\n\n\t42..999foo/* a */bar/**/\r\r\n\t\v\f",
      { TOK_NUMBER, "0000007" },
      { TOK_NUMBER, "0.500" },
      { TOK_NUMBER, "42" },

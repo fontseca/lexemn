@@ -26,7 +26,8 @@
 #include <locale.h>
 #include <string.h>
 
-#include "lexer.h"
+#include "lexemn.h"
+#include "lex.h"
 
 /* Forward function declarations.  */
 
@@ -66,7 +67,7 @@ struct lex_case
 
 /* Master table with all possible test cases when lexing.  */
 static struct lex_case const cases_table[] = {
-#include "lexer_test.def"
+#include "lex_test.def"
 };
 
 static char *const token_spellings[MAX_TOKENS] = {
@@ -95,25 +96,30 @@ static char *const token_spellings[MAX_TOKENS] = {
     || ( token ).type == TOK_CONST )
 #endif
 
+extern void lexemn_init(struct lexemn *);
+extern void lexemn_load(struct lexemn *, char const *);
+extern void lexemn_cleanup(struct lexemn *);
+extern void lex_start(struct lexemn *);
+
 static void
 test_lex(void)
 {
     constexpr size_t n_cases = sizeof(cases_table) / sizeof(cases_table[0]);
+    struct lexemn lexemn = { 0 };
+    lexemn_init(&lexemn);
+    lexemn.lex_stat.is_shell = true;
 
     for (size_t case_idx = 0; case_idx < n_cases; ++case_idx)
     {
-        struct tstream_t      stream = { 0 };
-        struct lexer_t        lexer;
         struct lex_case const row = cases_table[case_idx];
-
-        lex_setup(&lexer, (char unsigned const *) row.input);
-        lex_start(&lexer, &stream);
+        lexemn_load(&lexemn, row.input);
+        lex_start(&lexemn);
 
         /* Assert last token is TOK_END before subtracting below.  */
-        assert(stream.tokens[stream.size - 1].type == TOK_END);
+        assert(lexemn.stream.tokens[lexemn.stream.size - 1].type == TOK_END);
 
         /* Assert amount of lexed tokens matches expected count.  */
-        if (stream.size - 1 != row.expected_size)
+        if (lexemn.stream.size - 1 != row.expected_size)
         {
             fprintf(stderr, "Failed test case #%zu: Token count mismatch.\n\n", 1 + case_idx);
             fprintf(stderr, "INPUT:\n");
@@ -123,17 +129,17 @@ test_lex(void)
             fprintf(stderr, "%zu tokens\n", row.expected_size);
 
             fprintf(stderr, "\nACTUAL:\n");
-            fprintf(stderr, "%zu tokens\n\n", stream.size);
+            fprintf(stderr, "%zu tokens\n\n", lexemn.stream.size);
 
             fprintf(stderr, "%-5s %-18s %-15s %-18s %-15s\n", "IDX", "EXPECTED TYPE", "EXPECTED VALUE", "ACTUAL TYPE", "ACTUAL VALUE");
             fprintf(stderr, "%-5s %-18s %-15s %-18s %-15s\n", "----", "-------------", "--------------", "-----------", "------------");
 
-            for (size_t tok_idx = 0; tok_idx < stream.size; ++tok_idx)
+            for (size_t tok_idx = 0; tok_idx < lexemn.stream.size; ++tok_idx)
             {
                 /* Handle extra tokens if actual size exceeds expected size.  */
                 if (tok_idx >= row.expected_size)
                 {
-                    struct token_t const have = stream.tokens[tok_idx];
+                    struct token const have = lexemn.stream.tokens[tok_idx];
                     fprintf(stderr, "\033[31m%-5zu %-18s %-15s %-18s %-.*s\033[0m\n",
                                 tok_idx, "", "", TOK_NAME(have),
                                     (int)have.val.text.len, (char const *)have.val.text.str);
@@ -141,7 +147,7 @@ test_lex(void)
                 }
 
                 struct expect const  want = row.expected_tokens[tok_idx];
-                struct token_t const have = stream.tokens[tok_idx];
+                struct token const have = lexemn.stream.tokens[tok_idx];
                 bool is_mismatch = (want.type != have.type);
                 char const *want_val = TOK_IS_LITERAL(want) ? want.str : "";
                 if (TOK_IS_LITERAL(want))
@@ -161,7 +167,7 @@ test_lex(void)
                                     (int)have.val.text.len, (char const *)have.val.text.str, reset);
             }
 
-            free(stream.tokens);
+            free(lexemn.stream.tokens);
             assert(0 && "token count mismatch");
         }
 
@@ -169,7 +175,7 @@ test_lex(void)
         for (size_t tok_idx = 0; tok_idx < row.expected_size; ++tok_idx)
         {
             struct expect const  want = row.expected_tokens[tok_idx];
-            struct token_t const have = stream.tokens[tok_idx];
+            struct token const have = lexemn.stream.tokens[tok_idx];
 
             bool const type_mismatch = want.type != have.type;
             bool const str_mismatch = TOK_IS_LITERAL(want)
@@ -220,13 +226,18 @@ test_lex(void)
                     fprintf(stderr, "  text: `%.*s'\n\n", (int)have.val.text.len,
                             (char const *)have.val.text.str);
 
-                free(stream.tokens);
+                free(lexemn.stream.tokens);
                 assert(0 && "token mismatch");
             }
         }
 
-        free(stream.tokens);
+        free(lexemn.stream.tokens);
+        lexemn.stream.tokens = nullptr;
+        lexemn.stream.capacity = 0;
+        lexemn.stream.size = 0;
     }
+
+    lexemn_cleanup(&lexemn);
 }
 
 int
