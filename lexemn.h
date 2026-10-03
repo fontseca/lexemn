@@ -26,6 +26,7 @@
 #include <sys/stat.h>
 
 #include "lex.h"
+#include "symtab.h"
 
 /* Structure to track the scanning state and buffer context for a single page,
    which serves as the fundamental unit of input for scanning.  In file-system
@@ -109,11 +110,17 @@ struct lexemn
     /* Stream accumulator containing tokens scanned across all P_VEC pages.  */
     struct tstream_t stream;
 
+    /* Global symbol table for storing identifier.  */
+    struct symtab symtab;
+
     /* Bitfields representing internal operational states during lexing.  */
     struct
     {
         /* Nonzero if running interactively from a shell prompt.  */
         bool is_shell : 1;
+
+        /* Nonzero when running Lexemn in verbose mode.  */
+        bool is_verbose : 1;
 
         /* Nonzero if scanning source files from the file system.  */
         bool is_fs : 1;

@@ -33,6 +33,7 @@
 #include <readline/history.h>
 
 #include "lex.h"
+#include "symtab.h"
 #include "lexemn.h"
 
 /* Forward declarations.  */
@@ -64,6 +65,10 @@ lexemn_init(struct lexemn *const lexemn)
     lexemn->stream.size =
     lexemn->stream.capacity = 0;
     lexemn->stream.tokens = nullptr;
+
+    /* Symbol table.  */
+
+    symtab_init(&lexemn->symtab, 2);
 }
 
 /* Load input content into LEXEMN from WHENCE for lexical scanning. In file-system
@@ -220,6 +225,8 @@ lexemn_cleanup(struct lexemn *const lexemn)
         free(lexemn->stream.tokens);
         lexemn->stream.tokens = nullptr;
     }
+
+    symtab_cleanup(&lexemn->symtab);
 }
 
 /* Strip whitespaces from the start and the end of STRING.  Return a pointer
@@ -286,9 +293,15 @@ main(int argc, char *argv[])
 
         if (*s)
         {
-            lexemn_load(&lexemn, s);
-            lexemn_exec(&lexemn);
             add_history(s);
+            HIST_ENTRY *last_entry = history_get(history_length);
+            if (!last_entry)
+                printf("\033[1;31m<line interrupted; try again>\033[0m\n");
+            else
+            {
+                lexemn_load(&lexemn, last_entry->line);
+                lexemn_exec(&lexemn);
+            }
         }
 
         free(line);

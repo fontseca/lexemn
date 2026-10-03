@@ -127,11 +127,7 @@ enum token_type : short unsigned
     MAX_TOKENS
 };
 
-struct identifier  /* FIXME: Convert into symbol table entry.  */
-{
-    char unsigned const *name;
-    size_t               len;
-};
+struct symbl;
 
 /* An individual lexical token scanned from source code.  */
 struct token
@@ -140,7 +136,7 @@ struct token
     loc_t            loc;
     union
     {
-        struct identifier *node; /* An identifier in the symbol table.  */
+        struct symbl *node; /* An identifier in the symbol table.  */
         struct
         {
             char unsigned const *str;

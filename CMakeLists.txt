@@ -52,10 +52,14 @@ target_link_libraries(lex PRIVATE m)
 target_include_directories(lex PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_options(lex PRIVATE ${COMPILE_FLAGS})
 
+add_library(symtab STATIC symtab.c symtab.h)
+target_include_directories(symtab PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_options(symtab PRIVATE ${COMPILE_FLAGS})
+
 # Main executable
 
 add_executable(lexemn.out lexemn.c errors.c loc.c)
-target_link_libraries(lexemn.out PRIVATE lex readline m)
+target_link_libraries(lexemn.out PRIVATE lex symtab readline m)
 target_compile_options(lexemn.out PRIVATE ${COMPILE_FLAGS})
 
 # Helper object target for test compilation of lexemn.c
@@ -68,6 +72,11 @@ target_include_directories(lexemn_test_obj PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 # Unit tests.
 
 add_executable(test_lex.out lex_test.c errors.c loc.h $<TARGET_OBJECTS:lexemn_test_obj>)
-target_link_libraries(test_lex.out PRIVATE lex readline m)
+target_link_libraries(test_lex.out PRIVATE lex symtab readline m)
 target_compile_options(test_lex.out PRIVATE ${COMPILE_FLAGS})
 add_test(NAME test_lex COMMAND test_lex.out)
+
+add_executable(test_symtab.out symtab_test.c $<TARGET_OBJECTS:lexemn_test_obj>)
+target_link_libraries(test_symtab.out PRIVATE symtab lex readline)
+target_compile_options(test_symtab.out PRIVATE ${COMPILE_FLAGS})
+add_test(NAME test_symtab COMMAND test_symtab.out)

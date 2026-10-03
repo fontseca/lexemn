@@ -30,7 +30,11 @@
 
 #include "lexemn.h"
 #include "lex.h"
+
+#include <string.h>
+
 #include "errors.h"
+#include "symtab.h"
 
 /* Reflect how the token's text is managed in memory.  */
 enum spell_type : short unsigned
@@ -297,13 +301,14 @@ lex_string(struct lexemn const *const lexemn,
 /* Scan an identifier at the current position in the input source of LEXER
    and push it onto STREAM.  */
 static void
-lex_identifier(struct lexemn const *const lexemn,
+lex_identifier(struct lexemn *const lexemn,
                     struct token *const result)
 {
+    char unsigned const *str = lexemn->p_head->cur;
+    size_t len = 0;
     size_t offset;
     char32_t c32;
     mbstate_t st1 = {0};
-    result->val.text.str = lexemn->p_head->cur;
 
     /* Keep lexing the identifier.  */
     for (;;)
@@ -316,8 +321,10 @@ lex_identifier(struct lexemn const *const lexemn,
         }
 
         lexemn->p_head->cur += offset;
-        result->val.text.len += offset;
+        len += offset;
     }
+
+    result->val.node = symtab_lookup(&lexemn->symtab, str, len);
 }
 
 /* Scan a number literal value at the current read position in the input source of
@@ -712,12 +719,12 @@ lex_cmd(struct lexemn *const lexemn, struct token *const cmd)
         $SQRT2       1.41421356237309504880    {{* sqrt(2)    *}}
         $SQRT1_2     0.70710678118654752440    {{* 1/sqrt(2)  *}}  */
 static void
-lex_const(struct lexemn const *const lexemn,
+lex_const(struct lexemn *const lexemn,
                 struct token *const result)
 {
-    result->val.text.str = lexemn->p_head->cur;
+    char unsigned const *str = lexemn->p_head->cur;
     ++lexemn->p_head->cur; /* Skip the `$'.  */
-    ++result->val.text.len;
+    size_t len = 1;
 
     /* Check if the next character after `$' is a valid identifier.
        It should be any of [0-9a-zA-Z_], otherwise the constant
@@ -735,8 +742,10 @@ lex_const(struct lexemn const *const lexemn,
     while (isalnum(lexemn->p_head->cur[0]) || lexemn->p_head->cur[0] == '_')
     {
         ++lexemn->p_head->cur;
-        ++result->val.text.len;
+        ++len;
     }
+
+    result->val.node = symtab_lookup(&lexemn->symtab, str, len);
 }
 
 static void
@@ -1054,6 +1063,69 @@ fresh_line:
     }
 }
 
+static void
+tstream_dump(struct lexemn *lexemn, FILE *sink)
+{
+    static char *const spellings[MAX_TOKENS] = {
+#define OP( name, _ ) "TOK_" #name ,
+#define TOK( name, _ ) "TOK_" #name,
+        TOK_TYPES_TABLE
+#undef TOK
+#undef OP
+};
+
+    size_t longest_token_name = 0;
+    for (size_t i = 0; i < lexemn->stream.size; ++i)
+    {
+        size_t len = strlen(
+            spellings[lexemn->stream.tokens[i].type]);
+        if (len > longest_token_name)
+            longest_token_name = len;
+    }
+
+    for (size_t i = 0; i < lexemn->stream.size; ++i)
+    {
+        struct token token = lexemn->stream.tokens[i];
+        int32_t len = (int)strlen(spellings[token.type]);
+        uint32_t file = loc_file(token.loc);
+        uint32_t line = loc_line(token.loc);
+        uint32_t column = loc_column(token.loc);
+
+        if (lexemn->lex_stat.is_shell)
+            fprintf(sink, "@shell:%03d:%03d ", line, column);
+        else
+            fprintf(sink, "%03d:%03d:%03d ", file, line, column);
+
+        if (TOK_SPELL(token) == SPELL_OPERATOR
+            || TOK_SPELL(token) == SPELL_NONE)
+            fprintf(sink, "%s%*s ", spellings[token.type],
+                (int)longest_token_name-len, "");
+        else if (TOK_SPELL(token) == SPELL_LITERAL)
+            fprintf(sink, "%s%*s ", spellings[token.type],
+                (int)longest_token_name-len, "");
+        else if (TOK_SPELL(token) == SPELL_IDENT)
+            fprintf(sink, "%s%*s ", spellings[token.type],
+                (int)longest_token_name-len, "");
+
+        if (TOK_SPELL(token) == SPELL_LITERAL)
+            fprintf(sink, "%.*s", (int)token.val.text.len,
+                        (char *)token.val.text.str);
+        else if (TOK_SPELL(token) == SPELL_IDENT)
+            fprintf(sink, "%.*s (%p)", (int)token.val.node->len,
+                        (char *)token.val.node->str, (void *)token.val.node);
+
+        fprintf(sink, "\n");
+
+    }
+
+    if (lexemn->lex_stat.is_shell)
+        fprintf(sink, "%zu token(s) in previous line\n",
+            lexemn->stream.size);
+    else
+        fprintf(sink, "%zu token(s) in %zu file(s)\n",
+            lexemn->stream.size, lexemn->p_size);
+}
+
 void
 lex_start(struct lexemn *const lexemn)
 {
@@ -1074,4 +1146,6 @@ lex_start(struct lexemn *const lexemn)
     }
 
     tstream_push(lexemn, (struct token){ .type = TOK_END });
+    if (lexemn->lex_stat.is_verbose)
+        tstream_dump(lexemn, stdout);
 }

@@ -178,9 +178,12 @@ test_lex(void)
             struct token const have = lexemn.stream.tokens[tok_idx];
 
             bool const type_mismatch = want.type != have.type;
-            bool const str_mismatch = TOK_IS_LITERAL(want)
+            bool const str_mismatch = (TOK_IS_LITERAL(want)
                     && (have.val.text.len != strlen(want.str)
-                        || 0 != strncmp(want.str, (char const *)have.val.text.str, have.val.text.len));
+                        || 0 != strncmp(want.str, (char const *)have.val.text.str, have.val.text.len)))
+            || (TOK_IS_IDENT(want)
+                && (have.val.node->len != strlen(want.str)
+                    || 0 != strncmp(want.str, (char const *)have.val.node->str, have.val.node->len)));
 
             if (type_mismatch || str_mismatch)
             {
@@ -215,9 +218,7 @@ test_lex(void)
 
                 fprintf(stderr, "EXPECTED:\n");
                 fprintf(stderr, "  type: %s\n", TOK_NAME(want));
-
-                if (TOK_IS_LITERAL(want))
-                    fprintf(stderr, "  text: `%s'\n\n", want.str);
+                fprintf(stderr, "  text: `%s'\n\n", want.str);
 
                 fprintf(stderr, "ACTUAL:\n");
                 fprintf(stderr, "  type: %s\n", TOK_NAME(have));
@@ -225,6 +226,9 @@ test_lex(void)
                 if (TOK_IS_LITERAL(have))
                     fprintf(stderr, "  text: `%.*s'\n\n", (int)have.val.text.len,
                             (char const *)have.val.text.str);
+                else if (TOK_IS_IDENT(have))
+                    fprintf(stderr, "  text: `%.*s'\n\n", (int)have.val.node->len,
+                            (char const *)have.val.node->str);
 
                 free(lexemn.stream.tokens);
                 assert(0 && "token mismatch");
